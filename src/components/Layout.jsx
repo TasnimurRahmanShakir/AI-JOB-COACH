@@ -1,7 +1,7 @@
 import { Link, useLocation } from "react-router-dom"
-import {} from "lucide-react"
+import { } from "lucide-react"
 
-function Layout({ children, user, onLogout }) {
+function Layout({ children }) {
   const location = useLocation()
 
   return (
@@ -16,11 +16,10 @@ function Layout({ children, user, onLogout }) {
               <div className="hidden md:ml-10 md:flex md:space-x-8">
                 <Link
                   to="/dashboard"
-                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${
-                    location.pathname === "/dashboard"
-                      ? "border-teal-500 text-white"
-                      : "border-transparent text-slate-300 hover:text-white"
-                  }`}
+                  className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium ${location.pathname === "/dashboard"
+                    ? "border-teal-500 text-white"
+                    : "border-transparent text-slate-300 hover:text-white"
+                    }`}
                 >
                   Dashboard
                 </Link>

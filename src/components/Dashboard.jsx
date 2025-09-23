@@ -15,11 +15,13 @@ import {
 import { useState } from "react"
 import ResumeAnalysis from "./ResumeAnalysis"
 import ProgressReports from "./ProgressReports"
+import InterviewPrep from "./InterviewPrep"
 
 function Dashboard({ user }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeView, setActiveView] = useState("Dashboard")
+  const [isInterviewActive, setIsInterviewActive] = useState(false)
 
   const sidebarItems = [
     { name: "Dashboard", icon: BarChart3, active: activeView === "Dashboard" },
@@ -110,12 +112,7 @@ function Dashboard({ user }) {
       case "Resume Analysis":
         return <ResumeAnalysis />
       case "Interview Prep":
-        return (
-          <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Interview Prep</h1>
-            <p className="text-slate-400">Coming soon...</p>
-          </div>
-        )
+        return <InterviewPrep onInterviewStateChange={setIsInterviewActive} />
       case "Progress & Reports":
         return <ProgressReports />
       default:
@@ -167,7 +164,13 @@ function Dashboard({ user }) {
                 <p className="text-slate-400 text-sm leading-relaxed mb-4">{feature.description}</p>
               </div>
               <button
-                onClick={() => feature.title === "Resume Analysis" && handleNavigation("Resume Analysis")}
+                onClick={() => {
+                  if (feature.title === "Resume Analysis") {
+                    handleNavigation("Resume Analysis")
+                  } else if (feature.title === "Interview Prep") {
+                    handleNavigation("Interview Prep")
+                  }
+                }}
                 className="w-full bg-[#0C40A5] hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 {feature.buttonText}
@@ -247,7 +250,10 @@ function Dashboard({ user }) {
               </div>
             ))}
           </div>
-          <button className="text-cyan-400 hover:text-cyan-300 font-medium mt-4 transition-colors text-sm flex items-center gap-2">
+          <button
+            onClick={() => handleNavigation("Interview Prep")}
+            className="text-cyan-400 hover:text-cyan-300 font-medium mt-4 transition-colors text-sm flex items-center gap-2"
+          >
             View all practices
             <ArrowRight className="w-4 h-4" />
           </button>
@@ -260,102 +266,106 @@ function Dashboard({ user }) {
     <div className="min-h-screen bg-[#101622] flex">
       {isSidebarOpen && <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={closeSidebar} />}
 
-      {/* Sidebar */}
-      <div
-        className={`
-        w-64 bg-[#101622] border-r border-slate-800 flex flex-col
-        fixed lg:relative inset-y-0 left-0 z-50
-        transform transition-transform duration-300 ease-in-out lg:transform-none
-        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
-      `}
-      >
-        <div className="lg:hidden absolute top-4 right-4">
-          <button onClick={closeSidebar} className="p-2 text-slate-400 hover:text-white transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+      {/* Sidebar - Hide sidebar when interview is active */}
+      {!isInterviewActive && (
+        <div
+          className={`
+          w-64 bg-[#101622] border-r border-slate-800 flex flex-col
+          fixed lg:relative inset-y-0 left-0 z-50
+          transform transition-transform duration-300 ease-in-out lg:transform-none
+          ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+        `}
+        >
+          <div className="lg:hidden absolute top-4 right-4">
+            <button onClick={closeSidebar} className="p-2 text-slate-400 hover:text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
 
-        {/* Logo */}
-        <div className="p-6 border-b border-slate-700">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-[#102248] rounded-lg flex items-center justify-center">
-              <Target className="w-5 h-5 text-[#3D889C]" />
-            </div>
-            <div>
-              <h1 className="text-white font-semibold">CareerBoost AI</h1>
-              <p className="text-slate-400 text-xs">Boost up your career</p>
+          {/* Logo */}
+          <div className="p-6 border-b border-slate-700">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 bg-[#102248] rounded-lg flex items-center justify-center">
+                <Target className="w-5 h-5 text-[#3D889C]" />
+              </div>
+              <div>
+                <h1 className="text-white font-semibold">CareerBoost AI</h1>
+                <p className="text-slate-400 text-xs">Boost up your career</p>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4">
-          <div className="space-y-2">
-            {sidebarItems.map((item, index) => {
-              const Icon = item.icon
-              return (
-                <div
-                  key={index}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-2xl cursor-pointer transition-colors ${
-                    item.active ? "bg-[#0C40A5] text-white" : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                  }`}
-                  onClick={() => handleNavigation(item.name)}
+          {/* Navigation */}
+          <nav className="flex-1 p-4">
+            <div className="space-y-2">
+              {sidebarItems.map((item, index) => {
+                const Icon = item.icon
+                return (
+                  <div
+                    key={index}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-2xl cursor-pointer transition-colors ${
+                      item.active ? "bg-[#0C40A5] text-white" : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    }`}
+                    onClick={() => handleNavigation(item.name)}
+                  >
+                    <Icon className="w-5 h-5" />
+                    <span className="text-sm font-medium">{item.name}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </nav>
+
+          {/* User Profile */}
+          <div className="p-4 border-t border-slate-700 relative">
+            <div
+              className="flex items-center gap-3 cursor-pointer hover:bg-slate-700 rounded-lg p-2 transition-colors"
+              onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+            >
+              <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center">
+                <User className="w-4 h-4 text-slate-300" />
+              </div>
+              <div className="flex-1">
+                <p className="text-white text-sm font-medium">{user?.email || "User"}</p>
+                <p className="text-slate-400 text-xs">Premium User</p>
+              </div>
+              <ChevronDown
+                className={`w-4 h-4 text-slate-400 transition-transform ${showProfileDropdown ? "rotate-180" : ""}`}
+              />
+            </div>
+
+            {/* Dropdown menu for logout */}
+            {showProfileDropdown && (
+              <div className="absolute bottom-full left-4 right-4 mb-2 bg-slate-700 rounded-lg border border-slate-600 shadow-lg">
+                <button
+                  onClick={handleLogout}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-600 rounded-lg transition-colors"
                 >
-                  <Icon className="w-5 h-5" />
-                  <span className="text-sm font-medium">{item.name}</span>
-                </div>
-              )
-            })}
+                  <LogOut className="w-4 h-4" />
+                  <span className="text-sm">Logout</span>
+                </button>
+              </div>
+            )}
           </div>
-        </nav>
-
-        {/* User Profile */}
-        <div className="p-4 border-t border-slate-700 relative">
-          <div
-            className="flex items-center gap-3 cursor-pointer hover:bg-slate-700 rounded-lg p-2 transition-colors"
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-          >
-            <div className="w-8 h-8 bg-slate-600 rounded-full flex items-center justify-center">
-              <User className="w-4 h-4 text-slate-300" />
-            </div>
-            <div className="flex-1">
-              <p className="text-white text-sm font-medium">{user?.email || "User"}</p>
-              <p className="text-slate-400 text-xs">Premium User</p>
-            </div>
-            <ChevronDown
-              className={`w-4 h-4 text-slate-400 transition-transform ${showProfileDropdown ? "rotate-180" : ""}`}
-            />
-          </div>
-
-          {/* Dropdown menu for logout */}
-          {showProfileDropdown && (
-            <div className="absolute bottom-full left-4 right-4 mb-2 bg-slate-700 rounded-lg border border-slate-600 shadow-lg">
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-3 px-4 py-3 text-slate-300 hover:text-white hover:bg-slate-600 rounded-lg transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                <span className="text-sm">Logout</span>
-              </button>
-            </div>
-          )}
         </div>
-      </div>
+      )}
 
-      {/* Main Content */}
-      <div className="flex-1 overflow-auto lg:ml-0">
-        <div className="lg:hidden bg-[#101622] border-b border-slate-800 p-4 flex items-center justify-between">
-          <button onClick={toggleSidebar} className="p-2 text-slate-400 hover:text-white transition-colors">
-            <Menu className="w-6 h-6" />
-          </button>
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-[#102248] rounded flex items-center justify-center">
-              <Target className="w-4 h-4 text-[#3D889C]" />
+      {/* Main Content - Adjust margin when sidebar is hidden */}
+      <div className={`flex-1 overflow-auto ${isInterviewActive ? "ml-0" : "lg:ml-0"}`}>
+        {!isInterviewActive && (
+          <div className="lg:hidden bg-[#101622] border-b border-slate-800 p-4 flex items-center justify-between">
+            <button onClick={toggleSidebar} className="p-2 text-slate-400 hover:text-white transition-colors">
+              <Menu className="w-6 h-6" />
+            </button>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 bg-[#102248] rounded flex items-center justify-center">
+                <Target className="w-4 h-4 text-[#3D889C]" />
+              </div>
+              <h1 className="text-white font-semibold text-sm">CareerBoost AI</h1>
             </div>
-            <h1 className="text-white font-semibold text-sm">CareerBoost AI</h1>
+            <div className="w-10"></div> {/* Spacer for centering */}
           </div>
-          <div className="w-10"></div> {/* Spacer for centering */}
-        </div>
+        )}
 
         {renderCurrentView()}
       </div>

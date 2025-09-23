@@ -32,7 +32,9 @@ function App() {
           />
           <Route
             path="/dashboard"
-            element={isAuthenticated ? <Dashboard user={user} /> : <Navigate to="/login" replace />}
+            element={
+              isAuthenticated ? <Dashboard user={user} onLogout={handleLogout} /> : <Navigate to="/login" replace />
+            }
           />
           <Route path="/" element={<Navigate to={isAuthenticated ? "/dashboard" : "/login"} replace />} />
         </Routes>

@@ -14,6 +14,7 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import ResumeAnalysis from "./ResumeAnalysis"
+import ProgressReports from "./ProgressReports"
 
 function Dashboard({ user }) {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
@@ -116,12 +117,7 @@ function Dashboard({ user }) {
           </div>
         )
       case "Progress & Reports":
-        return (
-          <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Progress & Reports</h1>
-            <p className="text-slate-400">Coming soon...</p>
-          </div>
-        )
+        return <ProgressReports />
       default:
         return renderDashboardContent()
     }

@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import InterviewSession from "./InterviewSession";
 
 function InterviewPrep({ onInterviewStateChange }) {
   const [isInterviewStarted, setIsInterviewStarted] = useState(false);
@@ -10,10 +11,7 @@ function InterviewPrep({ onInterviewStateChange }) {
     job_requirements: "",
     question_count: "5",
   });
-  const [interviewType, setInterviewType] = useState("audio"); // audio or video
-  const [isRecording, setIsRecording] = useState(false);
-  const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
+  const [interviewType, setInterviewType] = useState("audio"); 
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -80,143 +78,15 @@ function InterviewPrep({ onInterviewStateChange }) {
     onInterviewStateChange?.(false);
   };
 
-  // Audio recording
-  const startRecording = async () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert("Audio recording not supported in this browser");
-      return;
-    }
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mediaRecorder = new MediaRecorder(stream);
-    mediaRecorderRef.current = mediaRecorder;
-    audioChunksRef.current = [];
-
-    mediaRecorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunksRef.current.push(event.data);
-      }
-    };
-
-    mediaRecorder.onstop = () => {
-      const audioBlob = new Blob(audioChunksRef.current, {
-        type: "audio/webm",
-      });
-      const audioUrl = URL.createObjectURL(audioBlob);
-      const a = document.createElement("a");
-      a.href = audioUrl;
-      a.download = "interview_audio.webm";
-      a.click();
-    };
-
-    mediaRecorder.start();
-    setIsRecording(true);
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  if (isInterviewStarted) {
-    return (
-      <div className="min-h-screen bg-[#101622] text-white">
-        <div className="flex items-center justify-between p-6 border-b border-slate-700">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
-              <span className="text-white font-bold">💡</span>
-            </div>
-            <span className="font-semibold">CareerBoost AI</span>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm">?</span>
-            </div>
-            <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm">JS</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between mb-2 max-w-5xl mx-auto">
-            <div className="flex-1 bg-slate-700 rounded-full h-2 mr-4">
-              <div
-                className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-                style={{
-                  width: `${
-                    ((currentQuestion + 1) / (InterviewQuestion?.length || 1)) *
-                    100
-                  }%`,
-                }}
-              ></div>
-            </div>
-            <span className="text-slate-400 text-sm">
-              {currentQuestion + 1}/{InterviewQuestion?.length || 0}
-            </span>
-          </div>
-        </div>
-
-        <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <span className="px-3 py-1 bg-blue-600 rounded-full text-sm">
-                {InterviewQuestion[currentQuestion].difficulty}
-              </span>
-              <span className="text-slate-400">|</span>
-              <span className="px-3 py-1 bg-blue-600 rounded-full text-sm">
-                {InterviewQuestion[currentQuestion].type}
-              </span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-bold mb-8 max-w-4xl mx-auto leading-relaxed">
-              {InterviewQuestion[currentQuestion].question ||
-                "Loading question..."}
-            </h1>
-          </div>
-
-          <div className="mb-8 flex flex-col items-center gap-6">
-            {interviewType === "video" ? (
-              <div className="bg-black rounded-2xl aspect-video max-w-5xl mx-auto relative overflow-hidden flex items-center justify-center text-slate-500">
-                <span className="text-6xl">🎥 Video Interview Placeholder</span>
-              </div>
-            ) : (
-              <div className="bg-black rounded-2xl aspect-video max-w-5xl mx-auto relative overflow-hidden flex flex-col items-center justify-center text-slate-500">
-                <span className="text-6xl mb-4">🎤 Audio Interview</span>
-                <button
-                  onClick={isRecording ? stopRecording : startRecording}
-                  className={`px-6 py-3 rounded-full text-white font-semibold ${
-                    isRecording
-                      ? "bg-red-600 hover:bg-red-700"
-                      : "bg-green-600 hover:bg-green-700"
-                  }`}
-                >
-                  {isRecording ? "Stop Recording" : "Start Recording"}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between max-w-5xl mx-auto">
-            <button
-              onClick={handleNextQuestion}
-              disabled={currentQuestion >= (InterviewQuestion?.length || 0) - 1}
-              className="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-500 rounded-lg transition-colors"
-            >
-              Next Question
-            </button>
-
-            <button
-              onClick={handleEndInterview}
-              className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-            >
-              End Interview
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+ if (isInterviewStarted) {
+   return (
+     <InterviewSession
+       interviewQuestions={InterviewQuestion}
+       interviewType={interviewType}
+       onEndInterview={handleEndInterview}
+     />
+   );
+ }
 
   // Before starting interview: select type
   return (

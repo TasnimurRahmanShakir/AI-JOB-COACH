@@ -13,25 +13,26 @@ import {
   X,
 } from "lucide-react"
 import { useState, useContext, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
 import ResumeAnalysis from "./ResumeAnalysis"
 import ProgressReports from "./ProgressReports"
 import AuthContext from "../context/authContext"
 import toast from "react-hot-toast"
 import InterviewPrep from "./InterviewPrep"
 
-function Dashboard() {
+function Dashboard({ activeView = "Dashboard" }) {
   const { user, signOutUser, token } = useContext(AuthContext)
+  const navigate = useNavigate()
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
-  const [activeView, setActiveView] = useState("Dashboard")
   const [latestATSScore, setLatestATSScore] = useState(null)
   const [isLoadingScore, setIsLoadingScore] = useState(false)
 
   const sidebarItems = [
-    { name: "Dashboard", icon: BarChart3, active: activeView === "Dashboard" },
-    { name: "Resume Analysis", icon: FileText, active: activeView === "Resume Analysis" },
-    { name: "Interview Prep", icon: Video, active: activeView === "Interview Prep" },
-    { name: "Progress & Reports", icon: TrendingUp, active: activeView === "Progress & Reports" },
+    { name: "Dashboard", icon: BarChart3, active: activeView === "Dashboard", path: "/dashboard" },
+    { name: "Resume Analysis", icon: FileText, active: activeView === "Resume Analysis", path: "/resume-analysis" },
+    { name: "Interview Prep", icon: Video, active: activeView === "Interview Prep", path: "/interview-prep" },
+    { name: "Progress & Reports", icon: TrendingUp, active: activeView === "Progress & Reports", path: "/progress-reports" },
   ]
 
   const quickStartSteps = [
@@ -62,6 +63,7 @@ function Dashboard() {
       icon: FileText,
       buttonText: "Analyze Now",
       bgColor: "bg-blue-600",
+      path: "/resume-analysis",
     },
     {
       title: "Interview Prep",
@@ -69,6 +71,7 @@ function Dashboard() {
       icon: Video,
       buttonText: "Start Practicing",
       bgColor: "bg-blue-600",
+      path: "/interview-prep",
     },
     {
       title: "Progress & Reports",
@@ -76,6 +79,7 @@ function Dashboard() {
       icon: BarChart3,
       buttonText: "View Reports",
       bgColor: "bg-blue-600",
+      path: "/progress-reports",
     },
   ]
 
@@ -145,8 +149,8 @@ function Dashboard() {
     setIsSidebarOpen(false)
   }
 
-  const handleNavigation = (viewName) => {
-    setActiveView(viewName)
+  const handleNavigation = (path) => {
+    navigate(path)
     if (window.innerWidth < 1024) {
       closeSidebar()
     }
@@ -216,7 +220,7 @@ function Dashboard() {
                 </p>
               </div>
               <button
-                onClick={() => handleNavigation(feature.title)}
+                onClick={() => handleNavigation(feature.path)}
                 className="w-full bg-[#0C40A5] hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 {feature.buttonText}
@@ -380,7 +384,7 @@ function Dashboard() {
                   key={index}
                   className={`flex items-center gap-3 px-3 py-2 rounded-2xl cursor-pointer transition-colors ${item.active ? "bg-[#0C40A5] text-white" : "text-slate-300 hover:bg-slate-700 hover:text-white"
                     }`}
-                  onClick={() => handleNavigation(item.name)}
+                  onClick={() => handleNavigation(item.path)}
                 >
                   <Icon className="w-5 h-5" />
                   <span className="text-sm font-medium">{item.name}</span>

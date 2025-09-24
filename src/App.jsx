@@ -3,6 +3,9 @@ import { useContext } from "react"
 import LoginPage from "./components/LoginPage"
 import SignupPage from "./components/SignupPage"
 import Dashboard from "./components/Dashboard"
+import ResumeAnalysis from "./components/ResumeAnalysis"
+import InterviewPrep from "./components/InterviewPrep"
+import ProgressReports from "./components/ProgressReports"
 import { AuthProvider } from "./context/authContext"
 import AuthContext from "./context/authContext"
 import { Toaster } from "react-hot-toast";
@@ -33,7 +36,19 @@ function AppRoutes() {
         />
         <Route
           path="/dashboard"
-          element={user ? <Dashboard /> : <Navigate to="/login" replace />}
+          element={user ? <Dashboard activeView="Dashboard" /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/resume-analysis"
+          element={user ? <Dashboard activeView="Resume Analysis" /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/interview-prep"
+          element={user ? <Dashboard activeView="Interview Prep" /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/progress-reports"
+          element={user ? <Dashboard activeView="Progress & Reports" /> : <Navigate to="/login" replace />}
         />
         <Route
           path="/"

@@ -64,7 +64,9 @@ function LoginPage() {
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-[#808E8F] mb-2">Email Address</label>
+              <label className="block text-sm font-medium text-[#808E8F] mb-2">
+                Email Address
+              </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
@@ -81,7 +83,9 @@ function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[#808E8F] mb-2">Password</label>
+              <label className="block text-sm font-medium text-[#808E8F] mb-2">
+                Password
+              </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
@@ -114,7 +118,10 @@ function LoginPage() {
                 />
                 <span className="ml-2 text-sm text-slate-300">Remember me</span>
               </label>
-              <Link to="#" className="text-sm text-[#FBBF24] hover:text-yellow-300 transition-colors">
+              <Link
+                to="#"
+                className="text-sm text-[#FBBF24] hover:text-yellow-300 transition-colors"
+              >
                 Forgot Password?
               </Link>
             </div>
@@ -124,7 +131,11 @@ function LoginPage() {
               disabled={loading}
               className="w-full flex items-center justify-center bg-yellow-400 hover:bg-yellow-500 text-slate-900 font-semibold py-3 px-4 rounded-xl transition-all duration-200 transform hover:scale-105 disabled:opacity-70 disabled:transform-none cursor-pointer"
             >
-              {loading ? <Loader2 className="animate-spin" size={20} /> : "Sign In"}
+              {loading ? (
+                <Loader2 className="animate-spin" size={20} />
+              ) : (
+                "Sign In"
+              )}
             </button>
           </form>
 
@@ -144,7 +155,10 @@ function LoginPage() {
           <div className="mt-6 text-center">
             <p className="text-slate-400">
               Don't have an account?{" "}
-              <Link to="/signup" className="text-[#FBBF24] hover:text-yellow-300 font-medium transition-colors">
+              <Link
+                to="/signup"
+                className="text-[#FBBF24] hover:text-yellow-300 font-medium transition-colors"
+              >
                 Sign up
               </Link>
             </p>

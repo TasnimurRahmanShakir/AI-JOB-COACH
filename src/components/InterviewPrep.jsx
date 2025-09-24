@@ -46,11 +46,19 @@ function InterviewPrep({ onInterviewStateChange }) {
           );
 
         const result = await response.json();
-        console.log(result);
-        setInterviewQuestion(
-          result.interview_questions.interview_questions.questions
-        );
+        console.log(result.interview_questions.interview_questions.questions
+);
+
+        const question =
+          result?.interview_questions?.interview_questions?.questions ||
+          result?.interview_questions?.interview_questions ||
+          result?.interview_questions ||
+          [];
+        console.log("Question ", question)
+        setInterviewQuestion(question);
+
         setIsInterviewStarted(true);
+        
         setCurrentQuestion(0);
       } catch (error) {
         console.error("Error generating interview questions:", error);

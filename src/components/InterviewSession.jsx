@@ -1,96 +1,131 @@
 import { useState, useRef } from "react";
-import * as FFmpeg from "@ffmpeg/ffmpeg"; // <- correct import
-
-const { createFFmpeg, fetchFile } = FFmpeg;
 
 export default function InterviewSession({
   interviewQuestions,
-  interviewType,
-  onEndInterview,
+  interviewType = "audio",
+  redirectToProgress,
 }) {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [isRecording, setIsRecording] = useState(false);
-  const [isConverting, setIsConverting] = useState(false);
+  const [showStartButton, setShowStartButton] = useState(true);
+
   const mediaRecorderRef = useRef(null);
-  const audioChunksRef = useRef([]);
-  const ffmpeg = useRef(null);
+  const chunksRef = useRef([]);
+  const streamRef = useRef(null); // Keep track of media stream
+  const videoRef = useRef(null); // For video preview
 
   const startRecording = async () => {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    const mediaRecorder = new MediaRecorder(stream);
-    mediaRecorderRef.current = mediaRecorder;
-    audioChunksRef.current = [];
+    console.log("[Recording] start clicked");
+    const constraints =
+      interviewType === "video"
+        ? { video: true, audio: true }
+        : { audio: true };
 
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) audioChunksRef.current.push(e.data);
-    };
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      streamRef.current = stream;
+      console.log("[Recording] media stream obtained", stream);
 
-    mediaRecorder.start();
-    setIsRecording(true);
-  };
-
-  const stopRecording = async () => {
-    setIsRecording(false);
-    mediaRecorderRef.current.stop();
-
-    mediaRecorderRef.current.onstop = async () => {
-      const webmBlob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-
-      if (!ffmpeg.current) {
-        ffmpeg.current = createFFmpeg({ log: true });
-        await ffmpeg.current.load();
+      // Show video preview
+      if (interviewType === "video" && videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play();
       }
 
-      setIsConverting(true);
+      const mimeType = interviewType === "video" ? "video/webm" : "audio/webm";
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
 
-      ffmpeg.current.FS(
-        "writeFile",
-        "recording.webm",
-        await fetchFile(webmBlob)
-      );
-      await ffmpeg.current.run(
-        "-i",
-        "recording.webm",
-        "-vn",
-        "-ar",
-        "44100",
-        "-ac",
-        "2",
-        "-b:a",
-        "128k",
-        "recording.mp3"
-      );
+      chunksRef.current = [];
 
-      const mp3Data = ffmpeg.current.FS("readFile", "recording.mp3");
-      const mp3Blob = new Blob([mp3Data.buffer], { type: "audio/mp3" });
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+          console.log("[Recording] chunk captured, size:", e.data.size);
+        }
+      };
 
-      // Send MP3 to backend
-      const form = new FormData();
-      form.append("file", mp3Blob, "interview_audio.mp3");
-      form.append(
-        "question",
-        interviewQuestions[currentQuestion]?.question || ""
-      );
-
-      try {
-        const resp = await fetch("http://localhost:8000/transcribe", {
-          method: "POST",
-          body: form,
-        });
-        const data = await resp.json();
-        console.log("Transcription result:", data);
-      } catch (err) {
-        console.error("Error sending audio to backend:", err);
-      }
-
-      setIsConverting(false);
-    };
-  };
-
-  const handleNextQuestion = () => {
-    if (currentQuestion < interviewQuestions.length - 1) {
-      setCurrentQuestion(currentQuestion + 1);
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start();
+      setIsRecording(true);
+      setShowStartButton(false);
+      console.log("[Recording] started");
+    } catch (err) {
+      console.error("[Recording] getUserMedia failed:", err);
     }
+  };
+
+  const stopRecordingAndSend = async () => {
+    if (!mediaRecorderRef.current || !isRecording) {
+      console.log("[Recording] nothing to stop");
+      return;
+    }
+
+    console.log("[Recording] stopping...");
+    return new Promise((resolve) => {
+      mediaRecorderRef.current.onstop = async () => {
+        console.log("[Recording] stopped, preparing blob...");
+        const blobType =
+          interviewType === "video" ? "video/webm" : "audio/webm";
+        const blob = new Blob(chunksRef.current, { type: blobType });
+        chunksRef.current = [];
+
+        // Stop all tracks and remove video preview
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        }
+        if (videoRef.current) videoRef.current.srcObject = null;
+
+        console.log("[Upload] blob prepared:", blob);
+
+        const form = new FormData();
+        form.append(
+          "file",
+          blob,
+          interviewType === "video"
+            ? "interview_video.webm"
+            : "interview_audio.webm"
+        );
+        form.append(
+          "question",
+          interviewQuestions[currentQuestion]?.question || ""
+        );
+
+        try {
+          const url =
+            interviewType === "video"
+              ? "https://rdxf7rzg-8000.inc1.devtunnels.ms/analyze-video"
+              : "https://rdxf7rzg-8000.inc1.devtunnels.ms/transcribe";
+          console.log("[Upload] sending request to server...");
+          await fetch(url, { method: "POST", body: form });
+          console.log("[Upload] upload successful");
+        } catch (err) {
+          console.error("[Upload] upload failed:", err);
+        }
+
+        setIsRecording(false);
+        setShowStartButton(true);
+        resolve();
+      };
+
+      mediaRecorderRef.current.stop();
+    });
+  };
+
+  const handleNextQuestion = async () => {
+    console.log("[Interview] Next question clicked");
+    if (isRecording) await stopRecordingAndSend();
+    if (currentQuestion < interviewQuestions.length - 1) {
+      setCurrentQuestion((prev) => prev + 1);
+      console.log("[Interview] moved to question", currentQuestion + 1);
+    }
+  };
+
+  const handleEndInterview = async () => {
+    console.log("[Interview] End interview clicked");
+    if (isRecording) await stopRecordingAndSend();
+    console.log("Interview ended");
+    if (redirectToProgress) redirectToProgress();
   };
 
   return (
@@ -99,39 +134,41 @@ export default function InterviewSession({
         {interviewQuestions[currentQuestion]?.question || "Loading question..."}
       </h1>
 
-      {interviewType === "video" ? (
-        <div className="bg-black rounded-2xl aspect-video max-w-5xl mx-auto flex items-center justify-center text-slate-500">
-          🎥 Video Interview Placeholder
-        </div>
-      ) : (
-        <div className="bg-black rounded-2xl aspect-video max-w-5xl mx-auto flex flex-col items-center justify-center text-slate-500">
+      <div className="bg-black rounded-2xl aspect-video max-w-5xl mx-auto flex flex-col items-center justify-center text-slate-500">
+        {interviewType === "video" ? (
+          <video
+            ref={videoRef}
+            className="rounded-2xl w-full h-full object-cover"
+            autoPlay
+            muted
+          />
+        ) : (
           <span className="text-6xl mb-4">🎤 Audio Interview</span>
+        )}
+
+        {showStartButton && (
           <button
-            onClick={isRecording ? stopRecording : startRecording}
-            className={`px-6 py-3 rounded-full text-white font-semibold ${
-              isRecording
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-green-600 hover:bg-green-700"
-            }`}
+            onClick={startRecording}
+            className="px-6 py-3 rounded-full text-white font-semibold bg-green-600 hover:bg-green-700 mt-4"
           >
-            {isRecording ? "Stop Recording" : "Start Recording"}
+            Start Recording
           </button>
-          {isConverting && (
-            <span className="mt-2">Converting & sending to server... 🎵</span>
-          )}
-        </div>
-      )}
+        )}
+
+        {isRecording && (
+          <span className="text-yellow-400 mt-2">Recording...</span>
+        )}
+      </div>
 
       <div className="flex justify-between max-w-5xl mx-auto mt-6">
         <button
           onClick={handleNextQuestion}
-          disabled={currentQuestion >= interviewQuestions.length - 1}
-          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 rounded-lg"
+          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg"
         >
           Next Question
         </button>
         <button
-          onClick={onEndInterview}
+          onClick={handleEndInterview}
           className="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg"
         >
           End Interview

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from typing import Dict, List
 import whisper
 import cv2
@@ -10,7 +11,16 @@ import librosa
 import subprocess
 import httpx
 
+
 app = FastAPI(title="Interview Analysis API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # allow all HTTP methods
+    allow_headers=["*"],  # allow all headers
+)
 
 # --- Initialize models ---
 audio_model = whisper.load_model("base")
@@ -26,6 +36,7 @@ async def transcribe_audio(file: UploadFile = File(...), question: str = Form(..
     """
     Transcribe uploaded audio and return the original question.
     """
+    print("file: ", file)
     content = await file.read()
     with NamedTemporaryFile(suffix=".mpga", delete=False) as tmp:
         tmp.write(content)
@@ -36,12 +47,13 @@ async def transcribe_audio(file: UploadFile = File(...), question: str = Form(..
     finally:
         os.remove(tmp_path)
 
+    print(result)
     payload =  {
         "question": question,
         "text": result["text"],
         "segments": result.get("segments", [])
     }
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         external_resp = await client.post(
             "https://cmfqrpu3qmrwso3wt27f6tb0g.agent.a.smyth.ai/api/analyze_interview",
             json=payload
@@ -61,11 +73,11 @@ async def analyze_video(file: UploadFile = File(...), question: str = Form(...))
     if not file.content_type.startswith("video/"): # type: ignore
         raise HTTPException(status_code=400, detail="Invalid file type. Please upload a video file.")
 
-    with NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+    with NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
         tmp.write(await file.read())
         video_path = tmp.name
 
-    audio_path = video_path.replace(".mp4", ".wav")
+    audio_path = video_path.replace(".webm", ".wav")
 
     try:
         # Extract audio

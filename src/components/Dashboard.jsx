@@ -20,11 +20,12 @@ import toast from "react-hot-toast"
 import InterviewPrep from "./InterviewPrep"
 
 function Dashboard() {
-  const { user, signOutUser } = useContext(AuthContext)
+  const { user, signOutUser, token } = useContext(AuthContext)
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeView, setActiveView] = useState("Dashboard")
-
+  const [latestATSScore, setLatestATSScore] = useState(null)
+  const [isLoadingScore, setIsLoadingScore] = useState(false)
 
   const sidebarItems = [
     { name: "Dashboard", icon: BarChart3, active: activeView === "Dashboard" },
@@ -88,6 +89,42 @@ function Dashboard() {
     { name: "Behavioral Interview Practice", date: "June 15, 2024", rating: 4 },
     { name: "Technical Interview - Python", date: "June 12, 2024", rating: 3 },
   ]
+
+  // Fetch latest ATS score
+  useEffect(() => {
+    if (!token) return
+
+    const fetchLatestATSScore = async () => {
+      setIsLoadingScore(true)
+      try {
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/ats-score/latest`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setLatestATSScore(data)
+          console.log("Latest ATS score fetched:", data)
+        } else if (response.status === 401) {
+          console.error("Unauthorized access - token may be invalid")
+          toast.error("Session expired. Please login again.")
+        } else {
+          console.log("No ATS score found or error fetching score:", response.status)
+        }
+      } catch (error) {
+        console.error("Error fetching latest ATS score:", error)
+        toast.error("Failed to load ATS score")
+      } finally {
+        setIsLoadingScore(false)
+      }
+    }
+
+    fetchLatestATSScore()
+  }, [token])
 
   const handleLogout = async () => {
     try {
@@ -190,49 +227,87 @@ function Dashboard() {
         })}
       </div>
 
-      {/* Bottom Stats Section - 2 columns */}
+      {/* Bottom Stats Section - 3 columns with Latest ATS Score */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Latest Resume ATS Scores */}
+        {/* Latest ATS Score Widget */}
         <div className="bg-[#101622] rounded-xl p-6 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-6">Latest Resume ATS Scores</h3>
-          <div className="space-y-4">
-            {resumeScores.map((item, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <div className="flex-1 min-w-0 pr-3">
-                  <p className="text-white font-medium text-sm truncate mb-1">{item.name}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="relative w-12 h-12 flex-shrink-0">
-                    <svg className="w-12 h-12 transform -rotate-90" viewBox="0 0 36 36">
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="rgb(51 65 85)"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke={
-                          item.score >= 80 ? "rgb(34 197 94)" : item.score >= 60 ? "rgb(234 179 8)" : "rgb(239 68 68)"
-                        }
-                        strokeWidth="2"
-                        strokeDasharray={`${item.score}, 100`}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className={`text-xs font-bold ${item.color}`}>{item.score}%</span>
-                    </div>
-                  </div>
+          <h3 className="text-lg font-semibold text-white mb-6 text-center">Latest ATS Score</h3>
+          {isLoadingScore ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-400"></div>
+            </div>
+          ) : !latestATSScore ? (
+            <div className="text-center">
+              <div className="w-24 h-24 mx-auto mb-4 bg-slate-700 rounded-full flex items-center justify-center">
+                <FileText className="w-8 h-8 text-slate-400" />
+              </div>
+              <p className="text-slate-400 text-sm">No ATS score yet.</p>
+              <p className="text-slate-500 text-xs mt-1">Upload a resume to get started!</p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center">
+              <div className="relative w-24 h-24 mb-4">
+                <svg className="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
+                  <path
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke="rgb(51 65 85)"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                    fill="none"
+                    stroke={
+                      latestATSScore.ats_score >= 80 ? "rgb(34 197 94)" :
+                        latestATSScore.ats_score >= 60 ? "rgb(234 179 8)" :
+                          "rgb(239 68 68)"
+                    }
+                    strokeWidth="2"
+                    strokeDasharray={`${latestATSScore.ats_score}, 100`}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className={`text-lg font-bold ${latestATSScore.ats_score >= 80 ? "text-green-400" :
+                    latestATSScore.ats_score >= 60 ? "text-yellow-400" :
+                      "text-red-400"
+                    }`}>
+                    {latestATSScore.ats_score}%
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-          <button className="text-cyan-400 hover:text-cyan-300 font-medium mt-4 transition-colors text-sm flex items-center gap-2">
-            View all analyses
-            <ArrowRight className="w-4 h-4" />
-          </button>
+
+              <div className="text-center">
+                <p className="text-slate-300 text-sm mb-1">
+                  {latestATSScore.resume_name || "Recent Resume"}
+                </p>
+                <p className="text-slate-500 text-xs">
+                  {latestATSScore.createdAt
+                    ? new Date(latestATSScore.createdAt).toLocaleDateString()
+                    : "Today"
+                  }
+                </p>
+              </div>
+
+              <div className="mt-3 text-center">
+                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${latestATSScore.ats_score >= 80
+                  ? "bg-green-900 text-green-300"
+                  : latestATSScore.ats_score >= 60
+                    ? "bg-yellow-900 text-yellow-300"
+                    : "bg-red-900 text-red-300"
+                  }`}>
+                  {latestATSScore.ats_score >= 80 ? "Excellent" :
+                    latestATSScore.ats_score >= 60 ? "Good" : "Needs Improvement"}
+                </span>
+              </div>
+            </div>
+          )}
         </div>
+
+
+
+
 
         {/* Past Interview Performance */}
         <div className="bg-[#101622] rounded-xl p-6 border border-slate-700">
@@ -258,10 +333,6 @@ function Dashboard() {
               </div>
             ))}
           </div>
-          <button className="text-cyan-400 hover:text-cyan-300 font-medium mt-4 transition-colors text-sm flex items-center gap-2">
-            View all practices
-            <ArrowRight className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>

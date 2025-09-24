@@ -12,17 +12,19 @@ import {
   Menu,
   X,
 } from "lucide-react"
-import { useState, useContext } from "react"
+import { useState, useContext, useEffect } from "react"
 import ResumeAnalysis from "./ResumeAnalysis"
 import ProgressReports from "./ProgressReports"
 import AuthContext from "../context/authContext"
 import toast from "react-hot-toast"
+import InterviewPrep from "./InterviewPrep"
 
 function Dashboard() {
   const { user, signOutUser } = useContext(AuthContext)
   const [showProfileDropdown, setShowProfileDropdown] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [activeView, setActiveView] = useState("Dashboard")
+
 
   const sidebarItems = [
     { name: "Dashboard", icon: BarChart3, active: activeView === "Dashboard" },
@@ -118,12 +120,7 @@ function Dashboard() {
       case "Resume Analysis":
         return <ResumeAnalysis />
       case "Interview Prep":
-        return (
-          <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Interview Prep</h1>
-            <p className="text-slate-400">Coming soon...</p>
-          </div>
-        )
+        return <InterviewPrep />
       case "Progress & Reports":
         return <ProgressReports />
       default:
@@ -166,23 +163,30 @@ function Dashboard() {
         {mainFeatures.map((feature, index) => {
           const Icon = feature.icon
           return (
-            <div key={index} className="bg-[#101622] rounded-xl p-6 border border-slate-700">
+            <div
+              key={index}
+              className="bg-[#101622] rounded-xl p-6 border border-slate-700"
+            >
               <div className="mb-4">
                 <div className="w-12 h-12 bg-[#102248] rounded-lg flex items-center justify-center mb-4">
                   <Icon className="w-6 h-6 text-[#3f3d9c]" />
                 </div>
-                <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed mb-4">{feature.description}</p>
+                <h3 className="text-lg font-semibold text-white mb-2">
+                  {feature.title}
+                </h3>
+                <p className="text-slate-400 text-sm leading-relaxed mb-4">
+                  {feature.description}
+                </p>
               </div>
               <button
-                onClick={() => feature.title === "Resume Analysis" && handleNavigation("Resume Analysis")}
+                onClick={() => handleNavigation(feature.title)}
                 className="w-full bg-[#0C40A5] hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg transition-colors text-sm flex items-center justify-center gap-2 cursor-pointer"
               >
                 {feature.buttonText}
                 <ArrowRight className="w-4 h-4" />
               </button>
             </div>
-          )
+          );
         })}
       </div>
 

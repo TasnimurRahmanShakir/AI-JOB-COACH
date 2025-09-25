@@ -348,8 +348,71 @@ app.get("/api/interview-analysis/type/:type", authenticateUser, async (req, res)
     }
 });
 
-// ...existing code...
+// --------------------
+// INTERVIEW SCORES ROUTES
+// --------------------
 
+// Store interview overall score
+app.post("/api/store-interview-score", async (req, res) => {
+    try {
+        const { userId, overallScore, timestamp } = req.body;
+
+        if (!userId || !overallScore) {
+            return res.status(400).json({ error: "UserId and overallScore are required" });
+        }
+
+        const db = client.db("resumeDB");
+        const collection = db.collection("interviewScores");
+
+        const result = await collection.insertOne({
+            userId: userId,
+            overallScore: parseFloat(overallScore),
+            timestamp: timestamp || new Date().toISOString(),
+            createdAt: new Date()
+        });
+
+        console.log("✅ Interview score stored successfully:", result.insertedId);
+
+        res.json({
+            success: true,
+            message: "Interview score stored successfully",
+            id: result.insertedId
+        });
+    } catch (error) {
+        console.error("❌ Error storing interview score:", error);
+        res.status(500).json({ error: "Failed to store interview score" });
+    }
+});
+
+// Get last 7 overall scores for a user
+app.get("/api/get-last-scores/:userId", async (req, res) => {
+    try {
+        const { userId } = req.params;
+
+        if (!userId) {
+            return res.status(400).json({ error: "UserId is required" });
+        }
+
+        const db = client.db("resumeDB");
+        const collection = db.collection("interviewScores");
+
+        const scores = await collection
+            .find({ userId: userId })
+            .sort({ createdAt: -1 })
+            .limit(7)
+            .toArray();
+
+        console.log(`✅ Found ${scores.length} scores for user ${userId}`);
+
+        res.json({
+            success: true,
+            scores: scores.reverse() // Reverse to show oldest to newest
+        });
+    } catch (error) {
+        console.error("❌ Error fetching interview scores:", error);
+        res.status(500).json({ error: "Failed to fetch interview scores" });
+    }
+});
 
 // Start server
 app.listen(port, () => {

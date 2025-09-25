@@ -14,7 +14,9 @@ import {
   Calendar,
   Award,
   Mic,
-  VideoIcon
+  VideoIcon,
+  Users
+
 } from "lucide-react"
 import { useState, useContext, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
@@ -24,6 +26,7 @@ import AuthContext from "../context/authContext"
 import toast from "react-hot-toast"
 import InterviewPrep from "./InterviewPrep"
 import overlay from "../assets/overlay.png"
+import Mentor from "./Mentor"
 
 function Dashboard({ activeView = "Dashboard" }) {
   const { user, signOutUser, token } = useContext(AuthContext)
@@ -40,6 +43,7 @@ function Dashboard({ activeView = "Dashboard" }) {
     { name: "Resume Analysis", icon: FileText, active: activeView === "Resume Analysis", path: "/resume-analysis" },
     { name: "Interview Prep", icon: Video, active: activeView === "Interview Prep", path: "/interview-prep" },
     { name: "Progress & Reports", icon: TrendingUp, active: activeView === "Progress & Reports", path: "/progress-reports" },
+    { name: "Mentor Mode", icon: Users, active: activeView === "Mentor Mode", path: "/mentor" },
   ]
 
   const quickStartSteps = [
@@ -194,6 +198,8 @@ function Dashboard({ activeView = "Dashboard" }) {
         return <InterviewPrep />
       case "Progress & Reports":
         return <ProgressReports />
+      case "Mentor Mode":
+        return <Mentor />
       default:
         return renderDashboardContent()
     }
@@ -524,9 +530,8 @@ function Dashboard({ activeView = "Dashboard" }) {
         w-64 bg-[#101622] border-r border-slate-800 flex flex-col
         fixed lg:relative inset-y-0 left-0 z-50
         transform transition-transform duration-300 ease-in-out lg:transform-none
-        ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
-        }
+        ${isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+          }
       `}
       >
         <div className="lg:hidden absolute top-4 right-4">
@@ -559,11 +564,10 @@ function Dashboard({ activeView = "Dashboard" }) {
               return (
                 <div
                   key={index}
-                  className={`flex items-center gap-3 px-3 py-2 rounded-2xl cursor-pointer transition-colors ${
-                    item.active
-                      ? "bg-[#0C40A5] text-white"
-                      : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                  }`}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-2xl cursor-pointer transition-colors ${item.active
+                    ? "bg-[#0C40A5] text-white"
+                    : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                    }`}
                   onClick={() => handleNavigation(item.path)}
                 >
                   <Icon className="w-5 h-5" />
@@ -589,9 +593,8 @@ function Dashboard({ activeView = "Dashboard" }) {
               </p>
             </div>
             <ChevronDown
-              className={`w-4 h-4 text-slate-400 transition-transform ${
-                showProfileDropdown ? "rotate-180" : ""
-              }`}
+              className={`w-4 h-4 text-slate-400 transition-transform ${showProfileDropdown ? "rotate-180" : ""
+                }`}
             />
           </div>
 

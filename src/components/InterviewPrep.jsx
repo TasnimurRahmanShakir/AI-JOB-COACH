@@ -70,6 +70,11 @@ function InterviewPrep() {
           }
 
           console.log("Extracted questions:", questions);
+
+          // Store questions in localStorage for Mentor component
+          localStorage.setItem('interviewQuestions', JSON.stringify(questions));
+          console.log("Questions stored in localStorage for mentor:", questions);
+
           setInterviewQuestion(questions);
           setIsInterviewStarted(true);
           setCurrentQuestion(0);

@@ -275,7 +275,12 @@ export default function InterviewSession({
 
     // Wait a moment to show completion, then redirect to ProgressReports
     setTimeout(() => {
-      navigate('/progress-reports');
+      navigate('/progress-reports', {
+        state: {
+          interviewType: interviewType,
+          justCompleted: true
+        }
+      });
     }, 2000);
   };
 

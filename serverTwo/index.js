@@ -36,18 +36,26 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 // Authentication Middleware
 // --------------------
 const authenticateUser = (req, res, next) => {
+    console.log("🔍 Authentication check for:", req.method, req.path);
+    console.log("🔍 All headers:", req.headers);
+    console.log("🔍 Auth header:", req.headers.authorization);
+
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        console.log("❌ Missing or invalid authorization header");
         return res.status(401).json({
             error: "Unauthorized",
-            message: "Authorization header missing or invalid format"
+            message: "Authorization header missing or invalid format",
+            debug: "Expected format: 'Bearer <token>'"
         });
     }
 
     const token = authHeader.split(" ")[1];
+    console.log("🔍 Extracted token:", token ? token.substring(0, 20) + "..." : "null");
 
     if (!token) {
+        console.log("❌ Token missing from header");
         return res.status(401).json({
             error: "Unauthorized",
             message: "Token missing"
@@ -55,9 +63,12 @@ const authenticateUser = (req, res, next) => {
     }
 
     try {
+        console.log("🔍 Verifying token with secret:", JWT_SECRET.substring(0, 10) + "...");
         const decoded = jwt.verify(token, JWT_SECRET);
+        console.log("✅ Token decoded successfully:", decoded);
 
         if (!decoded.userId) {
+            console.log("❌ Token missing userId");
             return res.status(401).json({
                 error: "Invalid token",
                 message: "Token does not contain userId"
@@ -65,13 +76,14 @@ const authenticateUser = (req, res, next) => {
         }
 
         req.user = decoded; // { userId }
-        console.log("Authenticated user:", decoded.userId);
+        console.log("✅ Authenticated user:", decoded.userId);
         next();
     } catch (err) {
-        console.error("JWT verification error:", err.message);
+        console.error("❌ JWT verification error:", err.message);
         return res.status(401).json({
             error: "Invalid token",
-            message: err.message
+            message: err.message,
+            debug: "Token might be expired or invalid"
         });
     }
 };
@@ -83,6 +95,14 @@ const authenticateUser = (req, res, next) => {
 // Health check
 app.get("/", (req, res) => {
     res.json({ message: "Server running 🚀" });
+});
+
+// Test route to check authentication
+app.get("/api/test-auth", authenticateUser, (req, res) => {
+    res.json({
+        message: "Authentication working!",
+        user: req.user
+    });
 });
 
 // Login route (frontend sends email from Firebase)
@@ -109,7 +129,8 @@ app.post("/api/login", async (req, res) => {
             JWT_SECRET
         );
 
-        console.log("User logged in:", email);
+        console.log("✅ User logged in:", email);
+        console.log("✅ Token generated:", token.substring(0, 20) + "...");
 
         res.json({
             token,
@@ -201,7 +222,67 @@ app.get("/api/ats-scores", authenticateUser, async (req, res) => {
     }
 });
 
+// --------------------
+// INTERVIEW ANALYSIS ROUTES (Simple version)
+// --------------------
+
+// Save interview analysis (protected) - Following ATS score pattern
+// --------------------
+// Save Interview Analysis (works for both audio + video)
+// --------------------
+app.post("/api/interview-analysis", authenticateUser, async (req, res) => {
+    try {
+        const { type, data } = req.body;
+        // type = "audio" | "video"
+        if (!type || !data) {
+            return res.status(400).json({ error: "Missing type or data" });
+        }
+
+        const collection = client.db("interviewsDB").collection("analysis");
+        const newEntry = {
+            userId: req.user.userId,
+            type, // "audio" or "video"
+            data,
+            createdAt: new Date(),
+        };
+
+        await collection.insertOne(newEntry);
+        res.json({ success: true, saved: newEntry });
+    } catch (err) {
+        console.error("❌ Save error:", err);
+        res.status(500).json({ error: "Failed to save interview data" });
+    }
+});
+
+// --------------------
+// Get Latest Interview Analysis
+// --------------------
+app.get("/api/interview-analysis/latest", authenticateUser, async (req, res) => {
+    try {
+        const { type } = req.query; // pass ?type=audio or ?type=video
+        if (!type) {
+            return res.status(400).json({ error: "Missing interview type in query" });
+        }
+
+        const collection = client.db("interviewsDB").collection("analysis");
+        const latest = await collection.findOne(
+            { userId: req.user.userId, type },
+            { sort: { createdAt: -1 } }
+        );
+
+        if (!latest) {
+            return res.status(404).json({ error: "No interview data found" });
+        }
+
+        res.json(latest.data);
+    } catch (err) {
+        console.error("❌ Fetch error:", err);
+        res.status(500).json({ error: "Failed to fetch interview data" });
+    }
+});
+
 // Start server
 app.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}`);
+    console.log(`🚀 Server running on http://localhost:${port}`);
+    console.log(`🔑 JWT Secret: ${JWT_SECRET.substring(0, 10)}...`);
 });

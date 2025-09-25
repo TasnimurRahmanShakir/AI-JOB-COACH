@@ -51,6 +51,10 @@ function AppRoutes() {
           element={user ? <Dashboard activeView="Progress & Reports" /> : <Navigate to="/login" replace />}
         />
         <Route
+          path="/mentor"
+          element={user ? <Dashboard activeView="Mentor Mode" /> : <Navigate to="/login" replace />}
+        />
+        <Route
           path="/"
           element={<Navigate to={user ? "/dashboard" : "/login"} replace />}
         />

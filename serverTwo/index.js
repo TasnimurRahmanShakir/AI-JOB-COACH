@@ -348,6 +348,9 @@ app.get("/api/interview-analysis/type/:type", authenticateUser, async (req, res)
     }
 });
 
+// ...existing code...
+
+
 // Start server
 app.listen(port, () => {
     console.log(`🚀 Server running on http://localhost:${port}`);

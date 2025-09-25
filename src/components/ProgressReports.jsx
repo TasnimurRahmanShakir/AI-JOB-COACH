@@ -327,7 +327,7 @@ function ProgressReports() {
     correctness: `${q.correctness}/10`,
     confidence: `${Math.round(q.confidence / 10)}/10`,
     clarity: `${q.clarity > 1000 ? Math.round(q.clarity / 1000) : q.clarity}/10`,
-    pace: "N/A",
+
     nervousness: `${q.nervousness}/10`,
   })) || [
       {
@@ -462,9 +462,7 @@ function ProgressReports() {
                     <th className="text-center p-4 text-slate-400 font-medium text-sm uppercase tracking-wider">
                       Clarity
                     </th>
-                    <th className="text-center p-4 text-slate-400 font-medium text-sm uppercase tracking-wider">
-                      Pace
-                    </th>
+
                     <th className="text-center p-4 text-slate-400 font-medium text-sm uppercase tracking-wider">
                       Nervousness
                     </th>
@@ -488,9 +486,7 @@ function ProgressReports() {
                       <td className="p-4 text-center text-slate-300 text-sm font-medium">
                         {item.clarity}
                       </td>
-                      <td className="p-4 text-center text-slate-300 text-sm font-medium">
-                        {item.pace}
-                      </td>
+
                       <td className="p-4 text-center text-slate-300 text-sm font-medium">
                         {item.nervousness}
                       </td>

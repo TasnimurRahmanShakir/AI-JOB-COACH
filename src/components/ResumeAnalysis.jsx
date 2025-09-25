@@ -16,9 +16,6 @@ import { jsPDF } from "jspdf";
 import AuthContext from "../context/authContext";
 import toast from "react-hot-toast";
 
-// Declare global for Quill
-// (No need for TypeScript 'declare global' in .jsx files)
-
 function ResumeAnalysis() {
   const { token } = useContext(AuthContext);
   const [uploadedFile, setUploadedFile] = useState(null);
@@ -32,11 +29,120 @@ function ResumeAnalysis() {
   const [editedContent, setEditedContent] = useState("");
   const fileInputRef = useRef(null);
 
-  // Quill Editor Component
+  // Function to clean and format text for Quill editor
+  const prepareContentForQuill = (rawContent) => {
+    if (!rawContent) return "";
+
+    // Clean up the content and structure it properly for Quill
+    let cleaned = rawContent
+      .replace(/<[^>]*>/g, '') // Remove all HTML tags
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\n\s*\n\s*\n/g, '\n\n') // Normalize line breaks
+      .trim();
+
+    // Split into lines and rebuild with proper structure
+    const lines = cleaned.split('\n').filter(line => line.trim());
+    let formatted = '';
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Detect and format different types of content
+      if (i < 3 && line.match(/^[A-Z][A-Za-z\s]+$/) && !line.includes('@') && !line.includes('COMPUTER')) {
+        // Name
+        formatted += `<h1><strong>${line}</strong></h1><br>`;
+      } else if (line.includes('@') || line.includes('Phone:') || line.includes('GitHub:') || line.includes('Portfolio:') || line.includes('Mobile:')) {
+        // Contact info
+        formatted += `<p>${line}</p>`;
+      } else if (line.match(/^[A-Z][A-Z\s]+:?$/) || line.match(/^\*\*[A-Z][A-Z\s]+\*\*$/) || line.match(/^#{1,3}\s*[A-Z][A-Z\s]+$/)) {
+        // Section headers
+        const sectionTitle = line.replace(/\*\*/g, '').replace(/:$/, '').replace(/^#+\s*/, '');
+        formatted += `<br><h2><strong>${sectionTitle}</strong></h2><br>`;
+      } else if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+        // Bullet points
+        const bulletText = line.replace(/^[-•*]\s*/, '');
+        formatted += `<p>• ${bulletText}</p>`;
+      } else if (line.match(/^[A-Z][a-zA-Z\s&(),-]+$/) && !line.match(/^[A-Z][A-Z\s]+$/)) {
+        // Subsection headers (job titles, education, etc.)
+        formatted += `<p><strong>${line}</strong></p>`;
+      } else {
+        // Regular content
+        formatted += `<p>${line}</p>`;
+      }
+    }
+
+    return formatted;
+  };
+
+  // Function to extract structured data from content (for PDF generation)
+  const parseResumeContent = (content) => {
+    let textContent = content;
+
+    // If content contains HTML, extract text
+    if (content.includes('<')) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = content;
+      textContent = tempDiv.textContent || tempDiv.innerText || '';
+    }
+
+    const lines = textContent.split('\n').filter(line => line.trim());
+    const resumeData = {
+      name: '',
+      contact: [],
+      sections: []
+    };
+
+    let currentSection = null;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      // Extract name (first significant line)
+      if (i < 3 && line.match(/^[A-Z][A-Za-z\s]+$/) && !line.includes('@') && !line.includes('COMPUTER') && !resumeData.name) {
+        resumeData.name = line;
+        continue;
+      }
+
+      // Extract contact info
+      if (line.includes('@') || line.includes('Phone:') || line.includes('GitHub:') || line.includes('Portfolio:') || line.includes('Mobile:')) {
+        const cleanContact = line.replace(/(Email:|Phone:|GitHub:|Portfolio:|Mobile:)/gi, '').trim();
+        if (cleanContact) {
+          resumeData.contact.push(cleanContact);
+        }
+        continue;
+      }
+
+      // Detect section headers
+      if (line.match(/^[A-Z][A-Z\s]+:?$/) || line.match(/^\*\*[A-Z][A-Z\s]+\*\*$/) || line.match(/^#{1,3}\s*[A-Z][A-Z\s]+$/)) {
+        const sectionTitle = line.replace(/\*\*/g, '').replace(/:$/, '').replace(/^#+\s*/, '');
+        currentSection = {
+          title: sectionTitle,
+          content: []
+        };
+        resumeData.sections.push(currentSection);
+        continue;
+      }
+
+      // Add content to current section
+      if (currentSection && line.length > 0) {
+        currentSection.content.push(line);
+      }
+    }
+
+    return resumeData;
+  };
+
+  // Enhanced Quill Editor Component
   const QuillEditor = ({ content, onChange, onSave }) => {
     const editorRef = useRef(null);
     const toolbarRef = useRef(null);
     const quillRef = useRef(null);
+    const [isQuillReady, setIsQuillReady] = useState(false);
     const scriptsLoaded = useRef({
       highlight: false,
       quill: false,
@@ -44,12 +150,10 @@ function ResumeAnalysis() {
     });
 
     const initializeQuill = () => {
-      // Check if all required scripts are loaded
       if (!window.Quill || !window.hljs || !window.katex) {
         return;
       }
 
-      // Only initialize once
       if (quillRef.current || !editorRef.current || !toolbarRef.current) {
         return;
       }
@@ -64,16 +168,20 @@ function ResumeAnalysis() {
           theme: "snow",
         });
 
-        // Set initial content
+        // Set content properly
         if (content) {
-          quillRef.current.root.innerHTML = content;
+          const formattedContent = prepareContentForQuill(content);
+          quillRef.current.root.innerHTML = formattedContent;
         }
 
-        // Listen for text changes
+        // Listen for changes
         quillRef.current.on('text-change', () => {
           const htmlContent = quillRef.current.root.innerHTML;
           onChange(htmlContent);
         });
+
+        setIsQuillReady(true);
+        console.log("Quill initialized successfully");
 
       } catch (error) {
         console.error("Failed to initialize Quill:", error);
@@ -82,16 +190,15 @@ function ResumeAnalysis() {
 
     const handleScriptLoad = (scriptName) => {
       scriptsLoaded.current[scriptName] = true;
+      console.log(`${scriptName} script loaded`);
 
-      // Try to initialize when all scripts are loaded
       if (Object.values(scriptsLoaded.current).every((loaded) => loaded)) {
-        // Small delay to ensure DOM is ready
-        setTimeout(initializeQuill, 100);
+        console.log("All scripts loaded, initializing Quill...");
+        setTimeout(initializeQuill, 300);
       }
     };
 
     useEffect(() => {
-      // Load scripts if not already loaded
       if (!window.Quill) {
         const quillScript = document.createElement('script');
         quillScript.src = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js';
@@ -120,22 +227,27 @@ function ResumeAnalysis() {
       }
 
       // Load CSS files
-      const quillCSS = document.createElement('link');
-      quillCSS.rel = 'stylesheet';
-      quillCSS.href = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css';
-      document.head.appendChild(quillCSS);
+      if (!document.querySelector('link[href*="quill.snow.css"]')) {
+        const quillCSS = document.createElement('link');
+        quillCSS.rel = 'stylesheet';
+        quillCSS.href = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css';
+        document.head.appendChild(quillCSS);
+      }
 
-      const hlCSS = document.createElement('link');
-      hlCSS.rel = 'stylesheet';
-      hlCSS.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
-      document.head.appendChild(hlCSS);
+      if (!document.querySelector('link[href*="highlight.js"]')) {
+        const hlCSS = document.createElement('link');
+        hlCSS.rel = 'stylesheet';
+        hlCSS.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
+        document.head.appendChild(hlCSS);
+      }
 
-      const katexCSS = document.createElement('link');
-      katexCSS.rel = 'stylesheet';
-      katexCSS.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
-      document.head.appendChild(katexCSS);
+      if (!document.querySelector('link[href*="katex"]')) {
+        const katexCSS = document.createElement('link');
+        katexCSS.rel = 'stylesheet';
+        katexCSS.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+        document.head.appendChild(katexCSS);
+      }
 
-      // Cleanup function
       return () => {
         if (quillRef.current) {
           quillRef.current = null;
@@ -143,62 +255,52 @@ function ResumeAnalysis() {
       };
     }, []);
 
-    // Update content when prop changes
-    useEffect(() => {
-      if (quillRef.current && content) {
-        const currentContent = quillRef.current.root.innerHTML;
-        if (currentContent !== content) {
-          quillRef.current.root.innerHTML = content;
-        }
-      }
-    }, [content]);
-
     return (
-      <div className="h-full flex flex-col">
-        {/* Toolbar */}
-        <div ref={toolbarRef} className="border-b border-slate-600 bg-slate-700 rounded-t-lg">
+      <div className="h-full flex flex-col overflow-hidden">
+        <div ref={toolbarRef} className="border-b border-slate-600 bg-slate-700 rounded-t-lg p-2 flex-shrink-0">
           <span className="ql-formats">
-            <select className="ql-font"></select>
-            <select className="ql-size"></select>
+            <select className="ql-font text-white bg-slate-600"></select>
+            <select className="ql-size text-white bg-slate-600"></select>
           </span>
           <span className="ql-formats">
-            <button className="ql-bold"></button>
-            <button className="ql-italic"></button>
-            <button className="ql-underline"></button>
-            <button className="ql-strike"></button>
+            <button className="ql-bold text-white hover:text-blue-400"></button>
+            <button className="ql-italic text-white hover:text-blue-400"></button>
+            <button className="ql-underline text-white hover:text-blue-400"></button>
+            <button className="ql-strike text-white hover:text-blue-400"></button>
           </span>
           <span className="ql-formats">
-            <select className="ql-color"></select>
-            <select className="ql-background"></select>
+            <select className="ql-color text-white bg-slate-600"></select>
+            <select className="ql-background text-white bg-slate-600"></select>
           </span>
           <span className="ql-formats">
-            <button className="ql-header" value="1"></button>
-            <button className="ql-header" value="2"></button>
-            <button className="ql-blockquote"></button>
+            <button className="ql-header text-white hover:text-blue-400" value="1"></button>
+            <button className="ql-header text-white hover:text-blue-400" value="2"></button>
+            <button className="ql-blockquote text-white hover:text-blue-400"></button>
           </span>
           <span className="ql-formats">
-            <button className="ql-list" value="ordered"></button>
-            <button className="ql-list" value="bullet"></button>
-            <button className="ql-indent" value="-1"></button>
-            <button className="ql-indent" value="+1"></button>
+            <button className="ql-list text-white hover:text-blue-400" value="ordered"></button>
+            <button className="ql-list text-white hover:text-blue-400" value="bullet"></button>
+            <button className="ql-indent text-white hover:text-blue-400" value="-1"></button>
+            <button className="ql-indent text-white hover:text-blue-400" value="+1"></button>
           </span>
           <span className="ql-formats">
-            <button className="ql-link"></button>
-            <button className="ql-clean"></button>
+            <button className="ql-link text-white hover:text-blue-400"></button>
+            <button className="ql-clean text-white hover:text-blue-400"></button>
           </span>
         </div>
 
-        {/* Editor */}
-        <div
-          ref={editorRef}
-          className="flex-1 bg-slate-800 text-slate-100 min-h-[400px] border-l border-r border-b border-slate-600 rounded-b-lg"
-        />
+        <div className="flex-1 overflow-hidden">
+          <div
+            ref={editorRef}
+            className="h-full bg-slate-800 text-slate-100 border-l border-r border-slate-600 overflow-y-auto"
+            style={{ minHeight: '300px' }}
+          />
+        </div>
 
-        {/* Save Button */}
-        <div className="mt-2 flex justify-end">
+        <div className="p-3 bg-slate-700 border-t border-slate-600 rounded-b-lg flex-shrink-0">
           <button
             onClick={onSave}
-            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded flex items-center gap-2 ml-auto"
           >
             <Save className="w-4 h-4" />
             Save Changes
@@ -208,7 +310,98 @@ function ResumeAnalysis() {
     );
   };
 
-  // Enhanced PDF viewer component with editing capability
+  // Enhanced content formatting function for display
+  const formatResumeContent = (content) => {
+    if (!content) return "";
+
+    let formattedContent = content
+      .replace(/\n\s*\n\s*\n/g, '\n\n')
+      .replace(/\r\n/g, '\n')
+      .trim();
+
+    const lines = formattedContent.split('\n');
+    let formatted = '';
+    let inContactSection = false;
+    let inSummarySection = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      let line = lines[i].trim();
+      if (!line) continue;
+
+      // Detect name (first significant line)
+      if (i < 3 && line.match(/^[A-Z][A-Za-z\s]+$/) && !line.includes('@') && !line.includes('COMPUTER')) {
+        formatted += `<h1 class="name-header">${line}</h1>\n`;
+        continue;
+      }
+
+      // Detect contact information
+      if (line.includes('@') || line.includes('Phone:') || line.includes('Email:') || line.includes('GitHub:') || line.includes('Portfolio:') || line.includes('Mobile:')) {
+        if (!inContactSection) {
+          formatted += '<div class="contact-section">\n';
+          inContactSection = true;
+        }
+
+        line = line.replace(/(Email:|Phone:|Address:|Portfolio:|GitHub:|Mobile:)/gi, '<span class="contact-label">$1</span>');
+        line = line.replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<span class="contact-value">$1</span>');
+        line = line.replace(/(\+?\d{10,})/g, '<span class="contact-value">$1</span>');
+        formatted += `<p class="contact-item">${line}</p>\n`;
+        continue;
+      } else if (inContactSection) {
+        formatted += '</div>\n';
+        inContactSection = false;
+      }
+
+      // Detect major sections
+      if (line.match(/^[A-Z][A-Z\s]+:?$/) || line.match(/^\*\*[A-Z][A-Z\s]+\*\*$/) || line.match(/^#{1,3}\s*[A-Z][A-Z\s]+$/)) {
+        const sectionTitle = line.replace(/\*\*/g, '').replace(/:$/, '').replace(/^#+\s*/, '');
+
+        if (sectionTitle.includes('SUMMARY') || sectionTitle.includes('OBJECTIVE')) {
+          formatted += `<h2 class="section-header summary-header">${sectionTitle}</h2>\n`;
+          inSummarySection = true;
+        } else {
+          formatted += `<h2 class="section-header">${sectionTitle}</h2>\n`;
+          inSummarySection = false;
+        }
+        continue;
+      }
+
+      // Format job titles, education, etc.
+      if (line.match(/^[A-Z][a-zA-Z\s&(),-]+$/) && !line.match(/^[A-Z][A-Z\s]+$/)) {
+        formatted += `<h3 class="sub-header">${line}</h3>\n`;
+        continue;
+      }
+
+      // Format bullet points
+      if (line.startsWith('-') || line.startsWith('•') || line.startsWith('*')) {
+        const bulletText = line.replace(/^[-•*]\s*/, '');
+        formatted += `<li class="bullet-item">${bulletText}</li>\n`;
+        continue;
+      }
+
+      // Format dates
+      if (line.match(/\d{4}/) && line.length < 50 && (line.includes('-') || line.includes('to') || line.includes('Present'))) {
+        formatted += `<p class="date-info">${line}</p>\n`;
+        continue;
+      }
+
+      // Format summary/objective content
+      if (inSummarySection) {
+        formatted += `<p class="summary-text">${line}</p>\n`;
+        continue;
+      }
+
+      // Regular paragraph
+      formatted += `<p class="regular-text">${line}</p>\n`;
+    }
+
+    if (inContactSection) {
+      formatted += '</div>\n';
+    }
+
+    return formatted;
+  };
+
+  // Enhanced PDF viewer component
   const PDFViewer = ({ fileUrl, title, isImproved = false, improvedContent = null }) => {
     if (!fileUrl && !improvedContent) {
       return (
@@ -221,22 +414,23 @@ function ResumeAnalysis() {
       );
     }
 
-    // For improved resume with editing capability
     if (isImproved && improvedContent) {
       return (
         <div className="bg-slate-800 rounded-lg h-full flex flex-col">
-          {/* Edit Controls */}
-          <div className="flex items-center justify-between p-3 border-b border-slate-600">
+          <div className="flex items-center justify-between p-3 border-b border-slate-600 flex-shrink-0">
             <span className="text-sm text-slate-300">Enhanced Resume Content</span>
             <div className="flex gap-2">
               <button
                 onClick={() => {
-                  setIsEditing(!isEditing);
                   if (!isEditing) {
-                    setEditedContent(highlightImprovedText(improvedContent));
+                    // Prepare content for editing - use the raw content from API
+                    const rawContent = analysisResults?.improved_resume?.improved_resume || improvedContent;
+                    console.log("Preparing content for editing:", rawContent.substring(0, 100) + "...");
+                    setEditedContent(rawContent);
                   }
+                  setIsEditing(!isEditing);
                 }}
-                className={`px-3 py-1 text-white text-xs rounded flex items-center gap-1 ${isEditing
+                className={`px-3 py-1 text-white text-xs rounded flex items-center gap-1 transition-colors ${isEditing
                   ? 'bg-red-600 hover:bg-red-700'
                   : 'bg-blue-600 hover:bg-blue-700'
                   }`}
@@ -256,12 +450,14 @@ function ResumeAnalysis() {
             </div>
           </div>
 
-          {/* Content Area */}
           <div className="flex-1 overflow-hidden">
             {isEditing ? (
               <QuillEditor
-                content={editedContent || highlightImprovedText(improvedContent)}
-                onChange={setEditedContent}
+                content={editedContent || analysisResults?.improved_resume?.improved_resume || improvedContent}
+                onChange={(newContent) => {
+                  console.log("Content updated in editor");
+                  setEditedContent(newContent);
+                }}
                 onSave={() => {
                   setIsEditing(false);
                   toast.success("Changes saved!");
@@ -272,7 +468,7 @@ function ResumeAnalysis() {
                 <div
                   className="text-slate-100 text-sm leading-relaxed improved-content-display"
                   dangerouslySetInnerHTML={{
-                    __html: editedContent || highlightImprovedText(improvedContent)
+                    __html: highlightImprovedText(editedContent || improvedContent)
                   }}
                 />
               </div>
@@ -282,7 +478,6 @@ function ResumeAnalysis() {
       );
     }
 
-    // For original PDF
     return (
       <div className="bg-slate-800 rounded-lg overflow-hidden h-full">
         {fileUrl ? (
@@ -303,35 +498,31 @@ function ResumeAnalysis() {
     );
   };
 
-  // Function to highlight improvements with simple color coding
+  // Enhanced highlighting function
   const highlightImprovedText = (content) => {
     if (!content) return "";
 
-    let highlightedText = content;
+    let highlightedText = formatResumeContent(content);
 
-    // Highlight action verbs and achievements (Green)
     const actionWords = [
       'achieved', 'improved', 'increased', 'developed', 'implemented', 'managed', 'led', 'created',
       'designed', 'built', 'optimized', 'enhanced', 'streamlined', 'delivered', 'executed',
       'coordinated', 'supervised', 'analyzed', 'researched', 'collaborated', 'established',
-      'contributed', 'facilitated', 'organized', 'mentored', 'trained', 'guided'
+      'contributed', 'facilitated', 'organized', 'mentored', 'trained', 'guided', 'spearheaded'
     ];
 
-    // Highlight metrics and numbers (Blue)
-    const metricPattern = /(\b\d+%|\$\d+[,\d]*|\d+\+?\s*(?:years?|months?|projects?|clients?|users?|developers?|team members?)\b)/gi;
+    const metricPattern = /(\b\d+%|\$\d+[,\d]*|\d+\+?\s*(?:years?|months?|projects?|clients?|users?|developers?|team members?|applications?|systems?)\b)/gi;
     highlightedText = highlightedText.replace(metricPattern, '<span class="metric-highlight">$1</span>');
 
-    // Highlight action words
     actionWords.forEach(word => {
       const pattern = new RegExp(`\\b${word}\\b`, 'gi');
       highlightedText = highlightedText.replace(pattern, `<span class="action-highlight">${word}</span>`);
     });
 
-    // Highlight technical skills
     const techSkills = [
       'JavaScript', 'Python', 'React', 'Node\\.js', 'HTML', 'CSS', 'SQL', 'MongoDB', 'Express',
       'Git', 'GitHub', 'AWS', 'Docker', 'Kubernetes', 'Firebase', 'TypeScript', 'C\\+\\+', 'Java',
-      'Angular', 'Vue', 'Laravel', 'PHP', 'C#', 'Rust', 'Swift', 'Kotlin'
+      'Angular', 'Vue', 'Laravel', 'PHP', 'C#', 'Rust', 'Swift', 'Kotlin', 'Next\\.js', 'Linux'
     ];
 
     techSkills.forEach(skill => {
@@ -339,12 +530,9 @@ function ResumeAnalysis() {
       highlightedText = highlightedText.replace(pattern, `<span class="tech-highlight">${skill.replace(/\\\./g, '.')}</span>`);
     });
 
-    // Highlight new content and improvements (Green background)
     const newContentPatterns = [
-      /(Key Achievements|Professional Summary|Core Competencies|Technical Expertise|Notable Projects)/gi,
-      /(evidence-based|patient-centered|specialized|clinical expertise|professional setting)/gi,
-      /(Expected 2025|GPA \d\.\d+)/gi,
-      /(Basic Life Support|Infection Prevention|American Heart Association)/gi
+      /(Professional Summary|Key Achievements|Core Competencies|Technical Expertise|Notable Projects|Career Highlights)/gi,
+      /(GPA \d\.\d+|Expected \d{4}|Dean's List|Summa Cum Laude|Magna Cum Laude)/gi
     ];
 
     newContentPatterns.forEach(pattern => {
@@ -354,11 +542,10 @@ function ResumeAnalysis() {
     return highlightedText;
   };
 
-  // Preview Modal Component with Quill editor integration
+  // Preview Modal Component (unchanged structure, just better content handling)
   const PreviewModal = () => (
     <div className="fixed inset-0 bg-black bg-opacity-95 flex items-center justify-center z-50 p-2">
       <div className="bg-[#0f1419] rounded-xl w-full h-full max-w-[98vw] max-h-[98vh] overflow-hidden border border-slate-600 flex flex-col">
-        {/* Modal Header - Fixed */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-900 flex-shrink-0">
           <div className="flex items-center gap-4">
             <h2 className="text-xl font-bold text-white">Resume Comparison & Editor</h2>
@@ -385,9 +572,7 @@ function ResumeAnalysis() {
           </button>
         </div>
 
-        {/* Comparison View - Flexible */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-1 flex-1 min-h-0">
-          {/* Original Resume Panel */}
           <div className="bg-slate-900 flex flex-col min-h-0">
             <div className="bg-slate-800 p-3 border-b border-slate-600 flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -404,7 +589,6 @@ function ResumeAnalysis() {
             </div>
           </div>
 
-          {/* Enhanced Resume Panel with Editor */}
           <div className="bg-slate-900 border-l border-slate-700 flex flex-col min-h-0">
             <div className="bg-slate-800 p-3 border-b border-slate-600 flex-shrink-0">
               <div className="flex items-center gap-2">
@@ -425,16 +609,15 @@ function ResumeAnalysis() {
           </div>
         </div>
 
-        {/* Modal Footer - Fixed */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border-t border-slate-700 bg-slate-900 gap-4 flex-shrink-0">
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 bg-green-400 rounded inline-block"></span>
-              <span>Improvements</span>
+              <span>Improvements & New Content</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 bg-blue-400 rounded inline-block"></span>
-              <span>Metrics & Skills</span>
+              <span>Skills & Metrics</span>
             </div>
             {isEditing && (
               <div className="text-yellow-400 text-xs">
@@ -464,7 +647,7 @@ function ResumeAnalysis() {
         </div>
       </div>
 
-      {/* Enhanced CSS Styles for highlighting and Quill */}
+      {/* Enhanced CSS Styles */}
       <style dangerouslySetInnerHTML={{
         __html: `
         /* Quill Editor Styles */
@@ -479,10 +662,17 @@ function ResumeAnalysis() {
         .ql-toolbar .ql-picker-item,
         .ql-toolbar button {
           color: #e2e8f0 !important;
+          background: transparent !important;
         }
 
         .ql-toolbar button:hover {
+          color: #60a5fa !important;
+          background: rgba(59, 130, 246, 0.1) !important;
+        }
+
+        .ql-toolbar button.ql-active {
           color: #3b82f6 !important;
+          background: rgba(59, 130, 246, 0.2) !important;
         }
 
         .ql-container {
@@ -490,81 +680,183 @@ function ResumeAnalysis() {
           border-left: 1px solid #475569 !important;
           border-right: 1px solid #475569 !important;
           background: #1e293b !important;
-          font-family: 'Inter', system-ui, -apple-system, sans-serif !important;
         }
 
         .ql-editor {
           color: #e2e8f0 !important;
           line-height: 1.6 !important;
           font-size: 14px !important;
+          padding: 20px !important;
         }
 
-        .ql-editor.ql-blank::before {
-          color: #64748b !important;
-        }
-
-        /* Content Display Styles */
-        .improved-content-display .action-highlight {
-          background: linear-gradient(120deg, rgba(34, 197, 94, 0.3) 0%, rgba(34, 197, 94, 0.1) 100%);
-          color: #4ade80;
-          padding: 1px 3px;
-          border-radius: 3px;
-          font-weight: 600;
-          border: 1px solid rgba(34, 197, 94, 0.2);
-        }
-
-        .improved-content-display .tech-highlight {
-          background: linear-gradient(120deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%);
-          color: #60a5fa;
-          padding: 1px 3px;
-          border-radius: 3px;
-          font-weight: 600;
-          border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .improved-content-display .metric-highlight {
-          background: linear-gradient(120deg, rgba(59, 130, 246, 0.3) 0%, rgba(59, 130, 246, 0.1) 100%);
-          color: #60a5fa;
-          padding: 1px 4px;
-          border-radius: 3px;
-          font-weight: 700;
-          border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .improved-content-display .new-content-highlight {
-          background: linear-gradient(120deg, rgba(34, 197, 94, 0.3) 0%, rgba(34, 197, 94, 0.1) 100%);
-          color: #4ade80;
-          padding: 1px 3px;
-          border-radius: 3px;
-          font-weight: 600;
-          border: 1px solid rgba(34, 197, 94, 0.2);
-        }
-
+        /* Resume Content Formatting */
         .improved-content-display {
           line-height: 1.6;
           font-family: 'Inter', system-ui, -apple-system, sans-serif;
+          color: #e2e8f0;
+          max-width: 100%;
         }
 
-        .improved-content-display p {
-          margin-bottom: 1em;
+        .improved-content-display .name-header {
+          color: #ffffff;
+          font-size: 24px;
+          font-weight: 800;
+          text-align: center;
+          margin: 0 0 16px 0;
+          padding-bottom: 8px;
+          border-bottom: 3px solid #3b82f6;
+          text-transform: uppercase;
+          letter-spacing: 2px;
+        }
+
+        .improved-content-display .contact-section {
+          text-align: center;
+          margin: 16px 0 24px 0;
+          padding: 16px;
+          background: rgba(30, 41, 59, 0.3);
+          border-radius: 8px;
+          border: 1px solid #334155;
+        }
+
+        .improved-content-display .contact-item {
+          margin: 4px 0;
+          font-size: 14px;
+        }
+
+        .improved-content-display .contact-label {
+          color: #10b981;
+          font-weight: 600;
+          margin-right: 8px;
+        }
+
+        .improved-content-display .contact-value {
+          color: #60a5fa;
+          font-weight: 500;
+        }
+
+        .improved-content-display .section-header {
+          color: #3b82f6;
+          font-size: 18px;
+          font-weight: 700;
+          margin: 24px 0 12px 0;
+          padding: 8px 0;
+          border-bottom: 2px solid #334155;
+          text-transform: uppercase;
+          letter-spacing: 1px;
+        }
+
+        .improved-content-display .summary-header {
+          color: #10b981;
+        }
+
+        .improved-content-display .sub-header {
+          color: #e2e8f0;
+          font-size: 16px;
+          font-weight: 600;
+          margin: 16px 0 8px 0;
+        }
+
+        .improved-content-display .summary-text {
+          color: #cbd5e1;
+          font-size: 15px;
+          line-height: 1.7;
+          margin: 8px 0;
+          font-style: italic;
+        }
+
+        .improved-content-display .date-info {
+          color: #a78bfa;
+          font-weight: 500;
+          font-size: 13px;
+          margin: 4px 0;
+        }
+
+        .improved-content-display .bullet-item {
+          margin: 6px 0;
+          padding-left: 0;
+          list-style: none;
+          position: relative;
+          color: #cbd5e1;
+          line-height: 1.5;
+        }
+
+        .improved-content-display .bullet-item::before {
+          content: "▶";
+          color: #3b82f6;
+          font-size: 12px;
+          position: absolute;
+          left: -16px;
+          top: 2px;
+        }
+
+        .improved-content-display ul {
+          margin: 12px 0;
+          padding-left: 20px;
+        }
+
+        .improved-content-display .regular-text {
+          margin: 8px 0;
+          line-height: 1.6;
+          color: #cbd5e1;
+        }
+
+        /* Highlighting Styles */
+        .improved-content-display .action-highlight {
+          background: linear-gradient(120deg, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.2) 100%);
+          color: #4ade80;
+          padding: 2px 4px;
+          border-radius: 4px;
+          font-weight: 600;
+          border: 1px solid rgba(34, 197, 94, 0.3);
+        }
+
+        .improved-content-display .tech-highlight {
+          background: linear-gradient(120deg, rgba(59, 130, 246, 0.4) 0%, rgba(59, 130, 246, 0.2) 100%);
+          color: #60a5fa;
+          padding: 2px 4px;
+          border-radius: 4px;
+          font-weight: 600;
+          border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .improved-content-display .metric-highlight {
+          background: linear-gradient(120deg, rgba(59, 130, 246, 0.4) 0%, rgba(59, 130, 246, 0.2) 100%);
+          color: #60a5fa;
+          padding: 2px 6px;
+          border-radius: 4px;
+          font-weight: 700;
+          border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .improved-content-display .new-content-highlight {
+          background: linear-gradient(120deg, rgba(34, 197, 94, 0.4) 0%, rgba(34, 197, 94, 0.2) 100%);
+          color: #4ade80;
+          padding: 2px 4px;
+          border-radius: 4px;
+          font-weight: 600;
+          border: 1px solid rgba(34, 197, 94, 0.3);
         }
 
         /* Scrollbar styling */
-        .improved-content-display::-webkit-scrollbar {
+        .improved-content-display::-webkit-scrollbar,
+        .ql-editor::-webkit-scrollbar {
           width: 8px;
         }
 
-        .improved-content-display::-webkit-scrollbar-track {
+        .improved-content-display::-webkit-scrollbar-track,
+        .ql-editor::-webkit-scrollbar-track {
           background: rgba(71, 85, 105, 0.3);
           border-radius: 4px;
         }
 
-        .improved-content-display::-webkit-scrollbar-thumb {
+        .improved-content-display::-webkit-scrollbar-thumb,
+        .ql-editor::-webkit-scrollbar-thumb {
           background: rgba(148, 163, 184, 0.5);
           border-radius: 4px;
         }
 
-        .improved-content-display::-webkit-scrollbar-thumb:hover {
+        .improved-content-display::-webkit-scrollbar-thumb:hover,
+        .ql-editor::-webkit-scrollbar-thumb:hover {
           background: rgba(148, 163, 184, 0.7);
         }
         `
@@ -572,7 +864,7 @@ function ResumeAnalysis() {
     </div>
   );
 
-  // ----- PDF Download with edited content support -----
+  // Enhanced PDF Download matching the exact format from the image
   const downloadPDF = (content) => {
     if (!content) {
       toast.error("No content available to download");
@@ -580,194 +872,244 @@ function ResumeAnalysis() {
     }
 
     const doc = new jsPDF();
+    const resumeData = parseResumeContent(content);
+
     let y = 20;
     const pageWidth = 210;
     const pageHeight = 297;
-    const leftMargin = 15;
-    const rightMargin = 195;
-    const lineHeight = 6;
-    let currentPage = 1;
-    const maxPages = 3;
+    const leftMargin = 20;
+    const rightMargin = 190;
+    const lineHeight = 5;
 
-    // Colors
-    const primaryColor = [41, 128, 185];
-    const secondaryColor = [52, 73, 94];
-    const lightGray = [149, 165, 166];
+    // Color scheme matching the image
+    const colors = {
+      headerBlue: [52, 152, 219],    // Professional blue header
+      darkText: [0, 0, 0],           // Black text
+      white: [255, 255, 255]         // White text
+    };
 
-    // Helper Functions
-    const addHeader = () => {
-      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.rect(0, 0, pageWidth, 25, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(18);
+    // Helper functions
+    const checkPageBreak = (requiredSpace) => {
+      if (y + requiredSpace > pageHeight - 20) {
+        doc.addPage();
+        y = 20;
+        return true;
+      }
+      return false;
+    };
+
+    const addBlueHeader = (name) => {
+      // Blue header background matching the image
+      doc.setFillColor(colors.headerBlue[0], colors.headerBlue[1], colors.headerBlue[2]);
+      doc.rect(0, 0, pageWidth, 35, 'F');
+
+      // "ENHANCED RESUME" title in white
+      doc.setTextColor(colors.white[0], colors.white[1], colors.white[2]);
+      doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text(editedContent ? 'EDITED RESUME' : 'ENHANCED RESUME', pageWidth / 2, 16, { align: 'center' });
-      y = 35;
+      doc.text('ENHANCED RESUME', pageWidth / 2, 22, { align: 'center' });
+
+      y = 45;
+    };
+
+    const addPersonalInfo = (name, contacts) => {
+      // Name
+      doc.setTextColor(colors.darkText[0], colors.darkText[1], colors.darkText[2]);
+      doc.setFontSize(14);
+      doc.setFont('helvetica', 'bold');
+      doc.text(name || "Professional Name", leftMargin, y);
+      y += 8;
+
+      // Contact information in a clean format
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+
+      contacts.forEach(contact => {
+        if (contact.trim()) {
+          doc.text(contact.trim(), leftMargin, y);
+          y += 5;
+        }
+      });
+
+      y += 5; // Extra space after contact info
+    };
+
+    const addSectionTitle = (title) => {
+      checkPageBreak(15);
+
+      // Section title in bold
+      doc.setTextColor(colors.darkText[0], colors.darkText[1], colors.darkText[2]);
+      doc.setFontSize(12);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, leftMargin, y);
+      y += 8;
+    };
+
+    const addJobTitle = (title, date = null) => {
+      checkPageBreak(10);
+
+      doc.setTextColor(colors.darkText[0], colors.darkText[1], colors.darkText[2]);
+      doc.setFontSize(11);
+      doc.setFont('helvetica', 'bold');
+
+      if (date) {
+        doc.text(title, leftMargin, y);
+        doc.text(date, rightMargin, y, { align: 'right' });
+      } else {
+        doc.text(title, leftMargin, y);
+      }
+
+      y += 6;
+    };
+
+    const addBulletText = (text) => {
+      checkPageBreak(8);
+
+      doc.setTextColor(colors.darkText[0], colors.darkText[1], colors.darkText[2]);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+
+      // Add bullet point
+      doc.text('•', leftMargin + 5, y);
+
+      // Add text with proper wrapping
+      const maxWidth = rightMargin - leftMargin - 15;
+      const textLines = doc.splitTextToSize(text, maxWidth);
+
+      textLines.forEach((line, index) => {
+        doc.text(line, leftMargin + 12, y + (index * lineHeight));
+      });
+
+      y += (textLines.length * lineHeight) + 2;
+    };
+
+    const addRegularText = (text) => {
+      checkPageBreak(8);
+
+      doc.setTextColor(colors.darkText[0], colors.darkText[1], colors.darkText[2]);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'normal');
+
+      const maxWidth = rightMargin - leftMargin;
+      const textLines = doc.splitTextToSize(text, maxWidth);
+
+      textLines.forEach((line, index) => {
+        doc.text(line, leftMargin, y + (index * lineHeight));
+      });
+
+      y += (textLines.length * lineHeight) + 3;
+    };
+
+    const addSkillsSection = (skills) => {
+      if (!skills || skills.length === 0) return;
+
+      checkPageBreak(20);
+
+      // Skills in a modern grid layout
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+
+      const skillsPerRow = 3;
+      const skillWidth = (rightMargin - leftMargin) / skillsPerRow;
+
+      skills.forEach((skill, index) => {
+        const row = Math.floor(index / skillsPerRow);
+        const col = index % skillsPerRow;
+        const x = leftMargin + (col * skillWidth);
+        const skillY = y + (row * 8);
+
+        // Skill background
+        doc.setFillColor(colors.background[0], colors.background[1], colors.background[2]);
+        doc.roundedRect(x, skillY - 4, skillWidth - 5, 7, 2, 2, 'F');
+
+        // Skill text
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.text(skill.trim(), x + 2, skillY);
+      });
+
+      y += Math.ceil(skills.length / skillsPerRow) * 8 + 10;
     };
 
     const addFooter = () => {
-      doc.setTextColor(lightGray[0], lightGray[1], lightGray[2]);
+      // Professional footer
       doc.setFontSize(8);
-      doc.text(`Page ${currentPage} of ${maxPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    };
+      doc.setTextColor(colors.lightText[0], colors.lightText[1], colors.lightText[2]);
+      doc.setFont('helvetica', 'italic');
 
-    const checkPageBreak = (requiredSpace) => {
-      if (y + requiredSpace > pageHeight - 25) {
-        if (currentPage < maxPages) {
-          addFooter();
-          doc.addPage();
-          currentPage++;
-          addHeader();
-          return true;
-        }
-        return false;
-      }
-      return true;
-    };
-
-    const addSectionHeader = (title) => {
-      if (!checkPageBreak(15)) return false;
-      y += 5;
-      doc.setDrawColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      // Footer line
+      doc.setDrawColor(colors.lightText[0], colors.lightText[1], colors.lightText[2]);
       doc.setLineWidth(0.5);
-      doc.line(leftMargin, y, rightMargin, y);
-      y += 5;
-      doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.setFontSize(14);
-      doc.setFont('helvetica', 'bold');
-      doc.text(title.toUpperCase(), leftMargin, y);
-      y += 10;
-      doc.setTextColor(0, 0, 0);
-      return true;
+      doc.line(leftMargin, pageHeight - 20, rightMargin, pageHeight - 20);
+
+      // Footer text
+      const footerText = `Generated by AI Job Coach • ${new Date().toLocaleDateString()}`;
+      doc.text(footerText, pageWidth / 2, pageHeight - 12, { align: 'center' });
     };
 
-    const addText = (text, fontSize = 10, fontStyle = 'normal') => {
-      if (!text || !checkPageBreak(6)) return false;
-      doc.setFontSize(fontSize);
-      doc.setFont('helvetica', fontStyle);
-      doc.setTextColor(0, 0, 0);
-      const maxWidth = rightMargin - leftMargin;
-      const textLines = doc.splitTextToSize(text, maxWidth);
-      textLines.forEach(line => {
-        if (!checkPageBreak(6)) return false;
-        doc.text(line, leftMargin, y);
-        y += lineHeight;
-      });
-      return true;
-    };
+    // Generate the PDF matching the image format
+    console.log("Generating PDF with exact format from image:", resumeData);
 
-    const addBulletPoint = (text) => {
-      if (!checkPageBreak(6)) return false;
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      const maxWidth = rightMargin - leftMargin - 10;
-      const textLines = doc.splitTextToSize(text, maxWidth);
-      textLines.forEach((line, index) => {
-        if (!checkPageBreak(6)) return false;
-        if (index === 0) {
-          doc.text('•', leftMargin + 5, y);
-          doc.text(line, leftMargin + 12, y);
-        } else {
-          doc.text(line, leftMargin + 12, y);
-        }
-        y += lineHeight;
-      });
-      return true;
-    };
+    // Add blue header
+    addBlueHeader();
 
-    // Start building PDF
-    addHeader();
-    addFooter();
+    // Add personal information
+    addPersonalInfo(resumeData.name, resumeData.contact);
 
-    // Clean the text - remove HTML tags and fix formatting
-    let cleanText = content
-      .replace(/<[^>]*>/g, '') // Remove HTML tags
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&amp;/g, '&')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/\n\s*\n/g, '\n')
-      .trim();
+    // Process each section
+    resumeData.sections.forEach(section => {
+      if (section.title && section.content.length > 0) {
+        addSectionTitle(section.title);
 
-    const lines = cleanText.split('\n');
-    let processedLines = 0;
-    const maxLines = 200;
+        section.content.forEach(item => {
+          const trimmedItem = item.trim();
+          if (!trimmedItem) return;
 
-    for (let i = 0; i < lines.length && processedLines < maxLines; i++) {
-      let line = lines[i].trim();
-      if (!line) continue;
+          // Parse different types of content
+          if (trimmedItem.includes('—') && trimmedItem.match(/\d{4}/)) {
+            // Job title with date (e.g., "Intern (Ongoing), BIRDEM General Hospital, Shahbagh, Dhaka — Expected 2025")
+            const parts = trimmedItem.split('—');
+            if (parts.length === 2) {
+              addJobTitle(parts[0].trim(), parts[1].trim());
+            } else {
+              addJobTitle(trimmedItem);
+            }
+          }
+          else if (trimmedItem.startsWith('•') || trimmedItem.startsWith('-') || trimmedItem.startsWith('*')) {
+            // Bullet point
+            addBulletText(trimmedItem.replace(/^[•\-*]\s*/, ''));
+          }
+          else if (trimmedItem.match(/^[A-Z]/)) {
+            // Company names or other important lines
+            addRegularText(trimmedItem);
+          }
+          else {
+            // Regular text
+            addRegularText(trimmedItem);
+          }
+        });
 
-      if (currentPage > maxPages) break;
-
-      if (line.startsWith('###')) {
-        const title = line.replace(/###\s*/, '').trim();
-        if (addSectionHeader(title)) {
-          processedLines++;
-        }
-      } else if (line.startsWith('##')) {
-        const title = line.replace(/##\s*/, '').trim();
-        if (checkPageBreak(8)) {
-          doc.setTextColor(secondaryColor[0], secondaryColor[1], secondaryColor[2]);
-          doc.setFontSize(12);
-          doc.setFont('helvetica', 'bold');
-          doc.text(title, leftMargin, y);
-          y += 8;
-          doc.setTextColor(0, 0, 0);
-          processedLines++;
-        }
-      } else if (line.startsWith('**') && line.endsWith('**')) {
-        const text = line.replace(/\*\*/g, '');
-        if (addText(text, 11, 'bold')) {
-          processedLines++;
-        }
-      } else if (line.startsWith('-') || line.startsWith('•')) {
-        const text = line.replace(/^[-•]\s*/, '');
-        if (addBulletPoint(text)) {
-          processedLines++;
-        }
-      } else if (line.startsWith('---')) {
-        if (checkPageBreak(4)) {
-          doc.setDrawColor(lightGray[0], lightGray[1], lightGray[2]);
-          doc.setLineWidth(0.3);
-          doc.line(leftMargin, y, rightMargin, y);
-          y += 6;
-          processedLines++;
-        }
-      } else if (line.length > 0) {
-        if (addText(line, 10, 'normal')) {
-          processedLines++;
-        }
+        y += 5; // Space between sections
       }
-    }
+    });
 
-    // Add final branding
-    if (checkPageBreak(20)) {
-      y += 10;
-      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
-      doc.rect(leftMargin, y, rightMargin - leftMargin, 15, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'bold');
-      doc.text('CREATED WITH AI JOB COACH', pageWidth / 2, y + 10, { align: 'center' });
-    }
-
-    const fileName = uploadedFile ?
-      `${editedContent ? 'Edited' : 'Enhanced'}_${uploadedFile.name.replace(/\.[^/.]+$/, "")}.pdf` :
-      `${editedContent ? 'Edited' : 'Enhanced'}_Resume.pdf`;
+    // Save the PDF
+    const fileName = resumeData.name
+      ? `${resumeData.name.replace(/\s+/g, '_')}_Enhanced_Resume.pdf`
+      : 'Enhanced_Resume.pdf';
 
     doc.save(fileName);
-    toast.success(`${editedContent ? 'Edited' : 'Enhanced'} resume downloaded successfully!`);
+    toast.success("PDF generated with exact format from image!");
   };
 
-  // Initialize edited content when analysis results are available
+  // Initialize edited content properly
   useEffect(() => {
-    if (analysisResults?.improved_resume?.improved_resume) {
-      setEditedContent(highlightImprovedText(analysisResults.improved_resume.improved_resume));
+    if (analysisResults?.improved_resume?.improved_resume && !editedContent) {
+      console.log("Initializing content for editing...");
+      setEditedContent("");
     }
   }, [analysisResults]);
 
-  // ----- File Handling -----
+  // Rest of the component functions remain unchanged...
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -809,7 +1151,6 @@ function ResumeAnalysis() {
     setOriginalFileURL(fileURL);
   };
 
-  // ----- Analyze Resume -----
   const handleAnalyze = async () => {
     if (!uploadedFile) {
       toast.error("Please upload a resume first");
@@ -886,11 +1227,11 @@ function ResumeAnalysis() {
     }
   };
 
-  // ----- Remove File -----
   const removeFile = () => {
     setUploadedFile(null);
     setShowResults(false);
     setAnalysisResults(null);
+    setEditedContent("");
     if (originalFileURL) {
       URL.revokeObjectURL(originalFileURL);
       setOriginalFileURL(null);
@@ -898,7 +1239,6 @@ function ResumeAnalysis() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ----- Helpers -----
   const getScoreColor = (score) => {
     if (score >= 80) return "text-green-400";
     if (score >= 60) return "text-yellow-400";

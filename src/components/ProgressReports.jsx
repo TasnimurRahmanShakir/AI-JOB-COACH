@@ -12,19 +12,20 @@ import {
 function ProgressReports() {
   const location = useLocation();
 
-  // Get interview type from navigation state, default to 'audio'
-  const interviewType = location.state?.interviewType || "audio";
+  // Get interview type from navigation state, default to checking latest from backend
+  const navigatedInterviewType = location.state?.interviewType;
   const justCompleted = location.state?.justCompleted || false;
 
-  console.log("🎯 ProgressReports received interview type:", interviewType);
+  console.log("🎯 ProgressReports navigated interview type:", navigatedInterviewType);
   console.log("🎯 Just completed interview:", justCompleted);
 
   const [apiData, setApiData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [interviewData, setInterviewData] = useState(null);
+  const [currentInterviewType, setCurrentInterviewType] = useState(navigatedInterviewType || 'audio');
 
-  // Get auth token from localStorage with debugging
+  // Get auth token from localStorage
   const getAuthToken = () => {
     const token = localStorage.getItem("authToken");
 
@@ -32,11 +33,6 @@ function ProgressReports() {
       "🔑 Token from localStorage:",
       token ? "Token exists" : "No token found"
     );
-    console.log(
-      "🔑 Token preview:",
-      token ? token.substring(0, 20) + "..." : "null"
-    );
-    console.log("🔑 All localStorage keys:", Object.keys(localStorage));
 
     if (!token) {
       console.log(
@@ -47,47 +43,51 @@ function ProgressReports() {
     return token;
   };
 
-  // Save interview analysis to backend (single endpoint for both audio & video)
-  const saveToBackend = async (data) => {
+  // Save interview analysis to backend - ENHANCED
+  const saveInterviewToBackend = async (interviewType, processedData, rawApiData = null) => {
     try {
       const token = getAuthToken();
       if (!token) {
         console.log("❌ No token available, skipping save");
-        return;
+        return false;
       }
 
-      const endpoint = "http://localhost:5000/api/interview-analysis";
+      console.log("💾 Saving interview to backend...");
+      console.log("💾 Interview Type:", interviewType);
+      console.log("💾 Processed Data:", processedData);
 
-      console.log("💾 Saving interview data to backend...");
-      console.log("💾 Data to save:", data);
-      console.log("💾 Endpoint:", endpoint);
-
-      const response = await fetch(endpoint, {
+      const response = await fetch("http://localhost:5000/api/interview-analysis", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ type: interviewType, data }), // include type
+        body: JSON.stringify({
+          interviewType: interviewType,
+          questions: processedData.questions || [],
+          averages: processedData.averages || {},
+          final_report: processedData.final_report || "",
+          raw_api_data: rawApiData
+        }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
         console.error("❌ Save failed:", errorData);
-        throw new Error(
-          `Save failed: ${errorData.message || response.statusText}`
-        );
+        return false;
       }
 
       const result = await response.json();
-      console.log("✅ Interview data saved to backend:", result);
+      console.log("✅ Interview saved successfully:", result);
+      return true;
     } catch (err) {
       console.error("❌ Failed to save to backend:", err);
+      return false;
     }
   };
 
-  // Get interview analysis from backend (single endpoint with ?type=)
-  const getFromBackend = async () => {
+  // Get latest interview from backend (any type)
+  const getLatestInterviewFromBackend = async () => {
     try {
       const token = getAuthToken();
       if (!token) {
@@ -95,11 +95,9 @@ function ProgressReports() {
         return null;
       }
 
-      const endpoint = `http://localhost:5000/api/interview-analysis/latest?type=${interviewType}`;
+      console.log("🔍 Fetching latest interview from backend...");
 
-      console.log(`🔍 Fetching saved ${interviewType} data from backend...`);
-
-      const response = await fetch(endpoint, {
+      const response = await fetch("http://localhost:5000/api/interview-analysis/latest", {
         method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -108,13 +106,22 @@ function ProgressReports() {
       });
 
       if (!response.ok) {
+        if (response.status === 404) {
+          console.log("📭 No saved interviews found");
+          return null;
+        }
         const errorData = await response.json();
         console.error("❌ Backend fetch failed:", errorData);
         return null;
       }
 
       const data = await response.json();
-      console.log("📚 Retrieved saved data:", data);
+      console.log("📚 Retrieved latest interview:", data);
+
+      if (data && data.interviewType) {
+        setCurrentInterviewType(data.interviewType);
+      }
+
       return data;
     } catch (err) {
       console.error("❌ Error fetching from backend:", err);
@@ -122,111 +129,207 @@ function ProgressReports() {
     }
   };
 
-  // Fetch data based on interview type
-  useEffect(() => {
-    const fetchInterviewAnalysisData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // First check if we have saved data
-        const savedData = await getFromBackend();
-        if (savedData) {
-          setInterviewData(savedData);
-          setLoading(false);
-          return;
-        }
-
-        // Otherwise fetch from external API
-        const apiUrl =
-          interviewType === "video"
-            ? "https://cmfyav9wl668z23qu1t8xralg.agent.a.smyth.ai/api/video_feedback"
-            : "https://cmfr1sf28nenwo3wtknm6a6y9.agent.a.smyth.ai/api/auto_analyze";
-
-        const response = await fetch(apiUrl, {
-          method: "GET",
-          headers: {
-            Accept: "application/json",
-            "Content-Type": "application/json",
-          },
-          cache: "no-cache",
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setApiData(data);
-
-        if (Array.isArray(data) && data.length > 0) {
-          const interviewOutput = data.find(
-            (item) => item.id === "M1INTERVIEW_OUTPUT"
-          );
-
-          if (interviewOutput?.result?.Output) {
-            const processedData = interviewOutput.result.Output.result;
-            setInterviewData(processedData);
-            await saveToBackend(processedData);
-          }
-        }
-      } catch (err) {
-        console.error(`❌ Error in ${interviewType} interview fetch process:`, err);
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInterviewAnalysisData();
-  }, [interviewType]);
-
-  // =========================
-  // Debug helpers
-  // =========================
-  const testAuth = async () => {
-    const token = getAuthToken();
-    if (!token) return;
-
+  // Get specific interview type from backend
+  const getInterviewByTypeFromBackend = async (type) => {
     try {
-      const response = await fetch("http://localhost:5000/api/test-auth", {
+      const token = getAuthToken();
+      if (!token) {
+        console.log("❌ No token available");
+        return null;
+      }
+
+      console.log(`🔍 Fetching ${type} interview from backend...`);
+
+      const response = await fetch(`http://localhost:5000/api/interview-analysis/type/${type}`, {
+        method: "GET",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
         },
       });
 
-      if (response.ok) {
-        const result = await response.json();
-        console.log("✅ Auth test successful:", result);
-      } else {
-        const error = await response.json();
-        console.log("❌ Auth test failed:", error);
+      if (!response.ok) {
+        if (response.status === 404) {
+          console.log(`📭 No ${type} interviews found`);
+          return null;
+        }
+        const errorData = await response.json();
+        console.error("❌ Backend fetch failed:", errorData);
+        return null;
       }
+
+      const data = await response.json();
+      console.log(`📚 Retrieved ${type} interview:`, data);
+      return data;
     } catch (err) {
-      console.error("❌ Auth test error:", err);
+      console.error("❌ Error fetching from backend:", err);
+      return null;
     }
   };
 
-  useEffect(() => {
-    console.log("🔍 Component mounted, checking authentication...");
-    const token = getAuthToken();
-    if (token) testAuth();
-  }, []);
+  // Fetch fresh data from external APIs
+  const fetchFreshInterviewData = async (interviewType) => {
+    try {
+      console.log(`🌐 Fetching fresh ${interviewType} data from external API...`);
 
-  // =========================
+      const apiUrl = interviewType === "video"
+        ? "https://cmfyav9wl668z23qu1t8xralg.agent.a.smyth.ai/api/video_feedback"
+        : "https://cmfr1sf28nenwo3wtknm6a6y9.agent.a.smyth.ai/api/auto_analyze";
+
+      console.log(`🌐 API URL: ${apiUrl}`);
+
+      const response = await fetch(apiUrl, {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        cache: "no-cache",
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const rawData = await response.json();
+      console.log(`✅ ${interviewType} API data fetched:`, rawData);
+
+      setApiData(rawData);
+
+      // Process the data
+      if (Array.isArray(rawData) && rawData.length > 0) {
+        const interviewOutput = rawData.find(
+          (item) => item.id === "M1INTERVIEW_OUTPUT"
+        );
+
+        if (interviewOutput?.result?.Output?.result) {
+          const processedData = interviewOutput.result.Output.result;
+          console.log(`✅ Processed ${interviewType} data:`, processedData);
+
+          // Save to backend immediately
+          const saved = await saveInterviewToBackend(interviewType, processedData, rawData);
+
+          if (saved) {
+            // If saved successfully, fetch it back to ensure consistency
+            const savedData = await getInterviewByTypeFromBackend(interviewType);
+            if (savedData) {
+              setInterviewData(savedData);
+              setCurrentInterviewType(interviewType);
+              return true;
+            }
+          }
+
+          // Fallback: use processed data directly
+          setInterviewData(processedData);
+          setCurrentInterviewType(interviewType);
+          return true;
+        } else {
+          console.log(`❌ No valid interview output found in ${interviewType} API response`);
+          return false;
+        }
+      } else {
+        console.log(`❌ ${interviewType} API returned invalid data structure`);
+        return false;
+      }
+    } catch (err) {
+      console.error(`❌ Error fetching ${interviewType} data:`, err);
+      throw err;
+    }
+  };
+
+  // Main data fetching logic
+  useEffect(() => {
+    const fetchInterviewData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        console.log("🚀 Starting interview data fetch process...");
+        console.log("🚀 Navigated type:", navigatedInterviewType);
+        console.log("🚀 Just completed:", justCompleted);
+
+        // If user just completed an interview, fetch fresh data for that type
+        if (justCompleted && navigatedInterviewType) {
+          console.log(`📱 User just completed ${navigatedInterviewType} interview, fetching fresh data...`);
+
+          try {
+            await fetchFreshInterviewData(navigatedInterviewType);
+            return;
+          } catch (err) {
+            console.error(`❌ Failed to fetch fresh ${navigatedInterviewType} data:`, err);
+            setError(`Failed to load ${navigatedInterviewType} interview data`);
+            return;
+          }
+        }
+
+        // Otherwise, try to load existing data first
+        console.log("📚 Loading existing interview data...");
+
+        const existingData = navigatedInterviewType
+          ? await getInterviewByTypeFromBackend(navigatedInterviewType)
+          : await getLatestInterviewFromBackend();
+
+        if (existingData) {
+          console.log("✅ Using existing interview data:", existingData);
+          setInterviewData(existingData);
+          setCurrentInterviewType(existingData.interviewType);
+          return;
+        }
+
+        // If no existing data, fetch fresh data
+        console.log("🌐 No existing data found, fetching fresh data...");
+        const typeToFetch = navigatedInterviewType || 'audio';
+
+        try {
+          await fetchFreshInterviewData(typeToFetch);
+        } catch (err) {
+          console.error(`❌ Failed to fetch fresh data:`, err);
+          setError(`Failed to load interview data`);
+        }
+
+      } catch (err) {
+        console.error("❌ Error in main fetch process:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInterviewData();
+  }, [navigatedInterviewType, justCompleted]);
+
+  // Switch between audio and video data
+  const switchInterviewType = async (type) => {
+    if (type === currentInterviewType) return;
+
+    setLoading(true);
+    console.log(`🔄 Switching to ${type} interview...`);
+
+    const data = await getInterviewByTypeFromBackend(type);
+    if (data) {
+      setInterviewData(data);
+      setCurrentInterviewType(type);
+    } else {
+      console.log(`📭 No ${type} interview found, fetching fresh data...`);
+      try {
+        await fetchFreshInterviewData(type);
+      } catch (err) {
+        setError(`Failed to load ${type} interview data`);
+      }
+    }
+
+    setLoading(false);
+  };
+
   // UI Data Preparation
-  // =========================
-  const interviewQuestions =
-    interviewData?.questions?.map((q, index) => ({
-      question: q.question || `Question ${index + 1}`,
-      correctness: `${q.correctness}/10`,
-      confidence: `${Math.round(q.confidence / 10)}/10`,
-      clarity: `${q.clarity > 1000 ? Math.round(q.clarity / 1000) : q.clarity
-        }/10`,
-      pace: "N/A",
-      nervousness: `${q.nervousness}/10`,
-    })) || [
+  const interviewQuestions = interviewData?.questions?.map((q, index) => ({
+    question: q.question || `Question ${index + 1}`,
+    correctness: `${q.correctness}/10`,
+    confidence: `${Math.round(q.confidence / 10)}/10`,
+    clarity: `${q.clarity > 1000 ? Math.round(q.clarity / 1000) : q.clarity}/10`,
+    pace: "N/A",
+    nervousness: `${q.nervousness}/10`,
+  })) || [
       {
         question: "Tell me about yourself.",
         correctness: "8/10",
@@ -251,9 +354,7 @@ function ProgressReports() {
       interviewData.averages.correctness * 10,
       interviewData.averages.confidence / 10,
       Math.min(interviewData.averages.clarity, 100),
-      75,
-      80,
-      85,
+      75, 80, 85,
     ]
     : [70, 75, 80, 78, 85, 82, 90];
 
@@ -262,61 +363,69 @@ function ProgressReports() {
     score: Math.round(Math.min(score, 100)),
   }));
 
-  // =========================
-  // UI
-  // =========================
   return (
     <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-2">
-          Interview Feedback
-        </h1>
+        <div className="flex items-center justify-between mb-4">
+          <h1 className="text-3xl font-bold text-white">
+            Interview Feedback
+          </h1>
+
+          {/* Interview Type Toggle */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => switchInterviewType('audio')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentInterviewType === 'audio'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+            >
+              🎤 Audio
+            </button>
+            <button
+              onClick={() => switchInterviewType('video')}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${currentInterviewType === 'video'
+                ? 'bg-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                }`}
+            >
+              🎥 Video
+            </button>
+          </div>
+        </div>
+
         <p className="text-slate-400">
           {interviewData
-            ? "AI-powered analysis from your recent interview"
-            : "Review your performance from the mock interview."}
+            ? `AI-powered analysis from your recent ${currentInterviewType} interview`
+            : `Review your ${currentInterviewType} interview performance.`}
         </p>
 
-        {/* API Status Indicator */}
+        {/* Status Indicator */}
         <div className="mt-4 space-y-2">
           {loading && (
             <div className="flex items-center text-yellow-400 text-sm">
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-yellow-400 mr-2"></div>
-              Loading {interviewType} interview analysis data...
+              Loading {currentInterviewType} interview data...
             </div>
           )}
+
           {error && (
-            <div className="text-red-400 text-sm">Error loading data: {error}</div>
+            <div className="text-red-400 text-sm">Error: {error}</div>
           )}
-          {apiData && !loading && (
+
+          {interviewData && !loading && (
             <div className="text-green-400 text-sm">
-              ✓ {interviewType} interview analysis data loaded successfully
+              ✓ {currentInterviewType} interview data loaded successfully
+              {justCompleted && " (Just completed)"}
             </div>
           )}
 
           <div className="text-slate-400 text-xs">
-            Interview Type: {interviewType}
-            {justCompleted && " (Just completed)"}
-          </div>
-
-          {/* Debug buttons */}
-          <div className="flex gap-2 mt-4">
-            <button
-              onClick={testAuth}
-              className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
-            >
-              Test Auth
-            </button>
-            <button
-              onClick={async () => {
-                const result = await getFromBackend();
-                console.log("🔄 Manual fetch result:", result);
-              }}
-              className="px-3 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
-            >
-              Test Fetch
-            </button>
+            Current: {currentInterviewType} interview
+            {interviewData?.createdAt && (
+              <span> • Completed: {new Date(interviewData.createdAt).toLocaleDateString()}</span>
+            )}
           </div>
         </div>
       </div>
@@ -330,6 +439,11 @@ function ProgressReports() {
               <h2 className="text-xl font-semibold text-white">
                 Question Breakdown
               </h2>
+              {interviewData && (
+                <p className="text-xs text-green-400 mt-1">
+                  ✓ Using AI analysis data ({currentInterviewType})
+                </p>
+              )}
             </div>
 
             <div className="overflow-x-auto">
@@ -398,7 +512,7 @@ function ProgressReports() {
             {interviewData?.averages && (
               <div className="mb-6 p-4 bg-slate-800 rounded-lg">
                 <h3 className="text-slate-300 text-sm font-medium mb-3">
-                  AI Analysis Scores
+                  AI Analysis Scores ({currentInterviewType})
                 </h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -480,16 +594,15 @@ function ProgressReports() {
       <div className="mt-8">
         <div className="bg-[#101622] rounded-xl p-6 border border-slate-700">
           <h2 className="text-xl font-semibold text-white mb-4">
-            AI Analysis Report
+            AI Analysis Report ({currentInterviewType})
           </h2>
           <div className="text-slate-300 text-sm leading-relaxed">
             {interviewData?.final_report ? (
               <p>{interviewData.final_report}</p>
             ) : (
               <p>
-                Your interview showcased strong correctness and clarity. Focus on
-                improving confidence and pace while managing nervousness for
-                better performance.
+                Your {currentInterviewType} interview showcased strong correctness and clarity.
+                Focus on improving confidence and pace while managing nervousness for better performance.
               </p>
             )}
           </div>

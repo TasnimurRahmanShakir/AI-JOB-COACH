@@ -124,7 +124,7 @@ function LoginPage() {
                 <User className="w-6 h-6 text-[#FBBF24]" />
               </div>
             </div>
-            <h1 className="text-2xl font-bold text-white">AI Job Coach</h1>
+            <h1 className="text-2xl font-bold text-white">CareerBoost AI</h1>
             <p className="text-slate-300">Sign in to your account</p>
           </div>
 

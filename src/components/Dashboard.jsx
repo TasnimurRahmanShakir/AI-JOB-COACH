@@ -19,6 +19,7 @@ import ProgressReports from "./ProgressReports"
 import AuthContext from "../context/authContext"
 import toast from "react-hot-toast"
 import InterviewPrep from "./InterviewPrep"
+import overlay from "../assets/overlay.png"
 
 function Dashboard({ activeView = "Dashboard" }) {
   const { user, signOutUser, token } = useContext(AuthContext)
@@ -365,7 +366,7 @@ function Dashboard({ activeView = "Dashboard" }) {
         <div className="p-6 border-b border-slate-700">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-[#102248] rounded-lg flex items-center justify-center">
-              <Target className="w-5 h-5 text-[#3D889C]" />
+              <img src={overlay} alt="" />
             </div>
             <div>
               <h1 className="text-white font-semibold">CareerBoost AI</h1>

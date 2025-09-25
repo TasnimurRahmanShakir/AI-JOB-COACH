@@ -15,7 +15,9 @@ import { useState, useRef, useContext, useEffect } from "react";
 import { jsPDF } from "jspdf";
 import AuthContext from "../context/authContext";
 import toast from "react-hot-toast";
-import Quill from 'quill';
+
+// Declare global for Quill
+// (No need for TypeScript 'declare global' in .jsx files)
 
 function ResumeAnalysis() {
   const { token } = useContext(AuthContext);
@@ -30,21 +32,181 @@ function ResumeAnalysis() {
   const [editedContent, setEditedContent] = useState("");
   const fileInputRef = useRef(null);
 
-  // Quill editor configuration
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline'],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      [{ 'color': [] }, { 'background': [] }],
-      ['clean']
-    ],
-  };
+  // Quill Editor Component
+  const QuillEditor = ({ content, onChange, onSave }) => {
+    const editorRef = useRef(null);
+    const toolbarRef = useRef(null);
+    const quillRef = useRef(null);
+    const scriptsLoaded = useRef({
+      highlight: false,
+      quill: false,
+      katex: false,
+    });
 
-  const quillFormats = [
-    'header', 'bold', 'italic', 'underline',
-    'list', 'bullet', 'color', 'background'
-  ];
+    const initializeQuill = () => {
+      // Check if all required scripts are loaded
+      if (!window.Quill || !window.hljs || !window.katex) {
+        return;
+      }
+
+      // Only initialize once
+      if (quillRef.current || !editorRef.current || !toolbarRef.current) {
+        return;
+      }
+
+      try {
+        quillRef.current = new window.Quill(editorRef.current, {
+          modules: {
+            syntax: true,
+            toolbar: toolbarRef.current,
+          },
+          placeholder: "Edit your enhanced resume content...",
+          theme: "snow",
+        });
+
+        // Set initial content
+        if (content) {
+          quillRef.current.root.innerHTML = content;
+        }
+
+        // Listen for text changes
+        quillRef.current.on('text-change', () => {
+          const htmlContent = quillRef.current.root.innerHTML;
+          onChange(htmlContent);
+        });
+
+      } catch (error) {
+        console.error("Failed to initialize Quill:", error);
+      }
+    };
+
+    const handleScriptLoad = (scriptName) => {
+      scriptsLoaded.current[scriptName] = true;
+
+      // Try to initialize when all scripts are loaded
+      if (Object.values(scriptsLoaded.current).every((loaded) => loaded)) {
+        // Small delay to ensure DOM is ready
+        setTimeout(initializeQuill, 100);
+      }
+    };
+
+    useEffect(() => {
+      // Load scripts if not already loaded
+      if (!window.Quill) {
+        const quillScript = document.createElement('script');
+        quillScript.src = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js';
+        quillScript.onload = () => handleScriptLoad('quill');
+        document.head.appendChild(quillScript);
+      } else {
+        handleScriptLoad('quill');
+      }
+
+      if (!window.hljs) {
+        const hlScript = document.createElement('script');
+        hlScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js';
+        hlScript.onload = () => handleScriptLoad('highlight');
+        document.head.appendChild(hlScript);
+      } else {
+        handleScriptLoad('highlight');
+      }
+
+      if (!window.katex) {
+        const katexScript = document.createElement('script');
+        katexScript.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js';
+        katexScript.onload = () => handleScriptLoad('katex');
+        document.head.appendChild(katexScript);
+      } else {
+        handleScriptLoad('katex');
+      }
+
+      // Load CSS files
+      const quillCSS = document.createElement('link');
+      quillCSS.rel = 'stylesheet';
+      quillCSS.href = 'https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css';
+      document.head.appendChild(quillCSS);
+
+      const hlCSS = document.createElement('link');
+      hlCSS.rel = 'stylesheet';
+      hlCSS.href = 'https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css';
+      document.head.appendChild(hlCSS);
+
+      const katexCSS = document.createElement('link');
+      katexCSS.rel = 'stylesheet';
+      katexCSS.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+      document.head.appendChild(katexCSS);
+
+      // Cleanup function
+      return () => {
+        if (quillRef.current) {
+          quillRef.current = null;
+        }
+      };
+    }, []);
+
+    // Update content when prop changes
+    useEffect(() => {
+      if (quillRef.current && content) {
+        const currentContent = quillRef.current.root.innerHTML;
+        if (currentContent !== content) {
+          quillRef.current.root.innerHTML = content;
+        }
+      }
+    }, [content]);
+
+    return (
+      <div className="h-full flex flex-col">
+        {/* Toolbar */}
+        <div ref={toolbarRef} className="border-b border-slate-600 bg-slate-700 rounded-t-lg">
+          <span className="ql-formats">
+            <select className="ql-font"></select>
+            <select className="ql-size"></select>
+          </span>
+          <span className="ql-formats">
+            <button className="ql-bold"></button>
+            <button className="ql-italic"></button>
+            <button className="ql-underline"></button>
+            <button className="ql-strike"></button>
+          </span>
+          <span className="ql-formats">
+            <select className="ql-color"></select>
+            <select className="ql-background"></select>
+          </span>
+          <span className="ql-formats">
+            <button className="ql-header" value="1"></button>
+            <button className="ql-header" value="2"></button>
+            <button className="ql-blockquote"></button>
+          </span>
+          <span className="ql-formats">
+            <button className="ql-list" value="ordered"></button>
+            <button className="ql-list" value="bullet"></button>
+            <button className="ql-indent" value="-1"></button>
+            <button className="ql-indent" value="+1"></button>
+          </span>
+          <span className="ql-formats">
+            <button className="ql-link"></button>
+            <button className="ql-clean"></button>
+          </span>
+        </div>
+
+        {/* Editor */}
+        <div
+          ref={editorRef}
+          className="flex-1 bg-slate-800 text-slate-100 min-h-[400px] border-l border-r border-b border-slate-600 rounded-b-lg"
+        />
+
+        {/* Save Button */}
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={onSave}
+            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded flex items-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            Save Changes
+          </button>
+        </div>
+      </div>
+    );
+  };
 
   // Enhanced PDF viewer component with editing capability
   const PDFViewer = ({ fileUrl, title, isImproved = false, improvedContent = null }) => {
@@ -67,44 +229,42 @@ function ResumeAnalysis() {
           <div className="flex items-center justify-between p-3 border-b border-slate-600">
             <span className="text-sm text-slate-300">Enhanced Resume Content</span>
             <div className="flex gap-2">
-              {!isEditing ? (
-                <button
-                  onClick={() => {
-                    setIsEditing(true);
+              <button
+                onClick={() => {
+                  setIsEditing(!isEditing);
+                  if (!isEditing) {
                     setEditedContent(highlightImprovedText(improvedContent));
-                  }}
-                  className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded flex items-center gap-1"
-                >
-                  <Edit3 className="w-3 h-3" />
-                  Edit
-                </button>
-              ) : (
-                <button
-                  onClick={() => {
-                    setIsEditing(false);
-                    toast.success("Changes saved!");
-                  }}
-                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-xs rounded flex items-center gap-1"
-                >
-                  <Save className="w-3 h-3" />
-                  Save
-                </button>
-              )}
+                  }
+                }}
+                className={`px-3 py-1 text-white text-xs rounded flex items-center gap-1 ${isEditing
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+              >
+                {isEditing ? (
+                  <>
+                    <X className="w-3 h-3" />
+                    Cancel
+                  </>
+                ) : (
+                  <>
+                    <Edit3 className="w-3 h-3" />
+                    Edit
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
           {/* Content Area */}
           <div className="flex-1 overflow-hidden">
             {isEditing ? (
-              <ReactQuill
-                theme="snow"
-                value={editedContent}
+              <QuillEditor
+                content={editedContent || highlightImprovedText(improvedContent)}
                 onChange={setEditedContent}
-                modules={quillModules}
-                formats={quillFormats}
-                style={{
-                  height: 'calc(100% - 42px)',
-                  backgroundColor: '#1e293b'
+                onSave={() => {
+                  setIsEditing(false);
+                  toast.success("Changes saved!");
                 }}
               />
             ) : (
@@ -278,7 +438,7 @@ function ResumeAnalysis() {
             </div>
             {isEditing && (
               <div className="text-yellow-400 text-xs">
-                ✏️ Click "Save" to preserve your changes
+                ✏️ Use the rich editor to customize your resume
               </div>
             )}
           </div>
@@ -298,14 +458,15 @@ function ResumeAnalysis() {
               className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors flex items-center gap-2 text-sm"
             >
               <Download className="w-4 h-4" />
-              Download {isEditing ? "Edited" : "Enhanced"}
+              Download {editedContent ? "Edited" : "Enhanced"}
             </button>
           </div>
         </div>
       </div>
 
       {/* Enhanced CSS Styles for highlighting and Quill */}
-      <style jsx global>{`
+      <style dangerouslySetInnerHTML={{
+        __html: `
         /* Quill Editor Styles */
         .ql-toolbar {
           border-top: 1px solid #475569 !important;
@@ -406,7 +567,8 @@ function ResumeAnalysis() {
         .improved-content-display::-webkit-scrollbar-thumb:hover {
           background: rgba(148, 163, 184, 0.7);
         }
-      `}</style>
+        `
+      }} />
     </div>
   );
 
@@ -439,7 +601,7 @@ function ResumeAnalysis() {
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(18);
       doc.setFont('helvetica', 'bold');
-      doc.text(isEditing ? 'EDITED RESUME' : 'ENHANCED RESUME', pageWidth / 2, 16, { align: 'center' });
+      doc.text(editedContent ? 'EDITED RESUME' : 'ENHANCED RESUME', pageWidth / 2, 16, { align: 'center' });
       y = 35;
     };
 
@@ -591,11 +753,11 @@ function ResumeAnalysis() {
     }
 
     const fileName = uploadedFile ?
-      `${isEditing ? 'Edited' : 'Enhanced'}_${uploadedFile.name.replace(/\.[^/.]+$/, "")}.pdf` :
-      `${isEditing ? 'Edited' : 'Enhanced'}_Resume.pdf`;
+      `${editedContent ? 'Edited' : 'Enhanced'}_${uploadedFile.name.replace(/\.[^/.]+$/, "")}.pdf` :
+      `${editedContent ? 'Edited' : 'Enhanced'}_Resume.pdf`;
 
     doc.save(fileName);
-    toast.success(`${isEditing ? 'Edited' : 'Enhanced'} resume downloaded successfully!`);
+    toast.success(`${editedContent ? 'Edited' : 'Enhanced'} resume downloaded successfully!`);
   };
 
   // Initialize edited content when analysis results are available
@@ -605,7 +767,7 @@ function ResumeAnalysis() {
     }
   }, [analysisResults]);
 
-  // ----- File Handling (unchanged) -----
+  // ----- File Handling -----
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -647,7 +809,7 @@ function ResumeAnalysis() {
     setOriginalFileURL(fileURL);
   };
 
-  // ----- Analyze Resume (unchanged) -----
+  // ----- Analyze Resume -----
   const handleAnalyze = async () => {
     if (!uploadedFile) {
       toast.error("Please upload a resume first");
@@ -736,7 +898,7 @@ function ResumeAnalysis() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  // ----- Helpers (unchanged) -----
+  // ----- Helpers -----
   const getScoreColor = (score) => {
     if (score >= 80) return "text-green-400";
     if (score >= 60) return "text-yellow-400";

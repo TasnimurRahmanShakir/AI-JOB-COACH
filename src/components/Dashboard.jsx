@@ -11,6 +11,10 @@ import {
   ChevronDown,
   Menu,
   X,
+  Calendar,
+  Award,
+  Mic,
+  VideoIcon
 } from "lucide-react"
 import { useState, useContext, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
@@ -28,6 +32,8 @@ function Dashboard({ activeView = "Dashboard" }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [latestATSScore, setLatestATSScore] = useState(null)
   const [isLoadingScore, setIsLoadingScore] = useState(false)
+  const [latestInterview, setLatestInterview] = useState(null)
+  const [isLoadingInterview, setIsLoadingInterview] = useState(false)
 
   const sidebarItems = [
     { name: "Dashboard", icon: BarChart3, active: activeView === "Dashboard", path: "/dashboard" },
@@ -84,17 +90,6 @@ function Dashboard({ activeView = "Dashboard" }) {
     },
   ]
 
-  const resumeScores = [
-    { name: "Resume for Software Engineer.pdf", score: 88, color: "text-green-400" },
-    { name: "Product Manager CV-Final.docx", score: 72, color: "text-yellow-400" },
-    { name: "Data Analyst Resume v2.pdf", score: 45, color: "text-red-400" },
-  ]
-
-  const interviewPerformance = [
-    { name: "Behavioral Interview Practice", date: "June 15, 2024", rating: 4 },
-    { name: "Technical Interview - Python", date: "June 12, 2024", rating: 3 },
-  ]
-
   // Fetch latest ATS score
   useEffect(() => {
     if (!token) return
@@ -129,6 +124,40 @@ function Dashboard({ activeView = "Dashboard" }) {
     }
 
     fetchLatestATSScore()
+  }, [token])
+
+  // Fetch latest interview data
+  useEffect(() => {
+    if (!token) return
+
+    const fetchLatestInterview = async () => {
+      setIsLoadingInterview(true)
+      try {
+        const response = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/interview-analysis/latest`, {
+          method: "GET",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+          },
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          setLatestInterview(data)
+          console.log("Latest interview data fetched:", data)
+        } else if (response.status === 401) {
+          console.error("Unauthorized access - token may be invalid")
+        } else {
+          console.log("No interview data found:", response.status)
+        }
+      } catch (error) {
+        console.error("Error fetching latest interview:", error)
+      } finally {
+        setIsLoadingInterview(false)
+      }
+    }
+
+    fetchLatestInterview()
   }, [token])
 
   const handleLogout = async () => {
@@ -232,7 +261,7 @@ function Dashboard({ activeView = "Dashboard" }) {
         })}
       </div>
 
-      {/* Bottom Stats Section - 3 columns with Latest ATS Score */}
+      {/* Bottom Stats Section - 2 columns with Latest ATS Score and Interview Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Latest ATS Score Widget */}
         <div className="bg-[#101622] rounded-xl p-6 border border-slate-700">
@@ -310,34 +339,171 @@ function Dashboard({ activeView = "Dashboard" }) {
           )}
         </div>
 
-
-
-
-
-        {/* Past Interview Performance */}
+        {/* Past Interview Performance - ENHANCED */}
         <div className="bg-[#101622] rounded-xl p-6 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-6">Past Interview Performance</h3>
-          <div className="space-y-4">
-            {interviewPerformance.map((interview, index) => (
-              <div key={index} className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-white font-medium text-sm">{interview.name}</p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 text-xs">{interview.date}</span>
-                  <div className="flex items-center gap-1">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-3 h-3 ${i < interview.rating ? "text-yellow-400 fill-current" : "text-slate-500"
-                          }`}
-                      />
-                    ))}
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold text-white">Latest Interview Performance</h3>
+            {latestInterview && (
+              <div className="flex items-center gap-1">
+                {latestInterview.interviewType === 'video' ? (
+                  <VideoIcon className="w-4 h-4 text-blue-400" />
+                ) : (
+                  <Mic className="w-4 h-4 text-green-400" />
+                )}
+                <span className="text-xs text-slate-400 capitalize">
+                  {latestInterview.interviewType}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {isLoadingInterview ? (
+            <div className="flex justify-center items-center h-32">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-400"></div>
+            </div>
+          ) : !latestInterview ? (
+            <div className="text-center py-8">
+              <div className="w-16 h-16 mx-auto mb-4 bg-slate-700 rounded-full flex items-center justify-center">
+                <Video className="w-6 h-6 text-slate-400" />
+              </div>
+              <p className="text-slate-400 text-sm mb-1">No interviews completed yet</p>
+              <p className="text-slate-500 text-xs">Start your first mock interview!</p>
+              <button
+                onClick={() => handleNavigation("/interview-prep")}
+                className="mt-3 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg transition-colors"
+              >
+                Start Interview
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Overall Score */}
+              <div className="flex items-center justify-between p-3 bg-slate-800 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    <Award className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <p className="text-white font-medium text-sm">Overall Score</p>
+                    <p className="text-slate-400 text-xs">Latest performance</p>
                   </div>
                 </div>
+                <div className="text-right">
+                  <span className={`text-lg font-bold ${latestInterview.averages?.overall_score >= 80 ? "text-green-400" :
+                    latestInterview.averages?.overall_score >= 60 ? "text-yellow-400" : "text-red-400"
+                    }`}>
+                    {latestInterview.averages?.overall_score || 'N/A'}
+                    {latestInterview.averages?.overall_score && '/100'}
+                  </span>
+                </div>
               </div>
-            ))}
-          </div>
+
+              {/* Individual Metrics */}
+              {latestInterview.averages && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-slate-800/50 rounded-lg">
+                    <p className="text-slate-400 text-xs mb-1">Confidence</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min((latestInterview.averages.confidence / 10), 100)}%`
+                          }}
+                        />
+                      </div>
+                      <span className="text-white text-xs font-medium">
+                        {Math.round(latestInterview.averages.confidence / 10)}/10
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-800/50 rounded-lg">
+                    <p className="text-slate-400 text-xs mb-1">Correctness</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-green-500 h-2 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(latestInterview.averages.correctness * 10, 100)}%`
+                          }}
+                        />
+                      </div>
+                      <span className="text-white text-xs font-medium">
+                        {latestInterview.averages.correctness}/10
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-800/50 rounded-lg">
+                    <p className="text-slate-400 text-xs mb-1">Clarity</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-purple-500 h-2 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(
+                              latestInterview.averages.clarity > 1000
+                                ? (latestInterview.averages.clarity / 1000) * 10
+                                : latestInterview.averages.clarity * 10,
+                              100
+                            )}%`
+                          }}
+                        />
+                      </div>
+                      <span className="text-white text-xs font-medium">
+                        {latestInterview.averages.clarity > 1000
+                          ? Math.round(latestInterview.averages.clarity / 1000)
+                          : latestInterview.averages.clarity}/10
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 bg-slate-800/50 rounded-lg">
+                    <p className="text-slate-400 text-xs mb-1">Nervousness</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-slate-700 rounded-full h-2">
+                        <div
+                          className="bg-orange-500 h-2 rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.min(latestInterview.averages.nervousness * 10, 100)}%`
+                          }}
+                        />
+                      </div>
+                      <span className="text-white text-xs font-medium">
+                        {latestInterview.averages.nervousness}/10
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Interview Details */}
+              <div className="flex items-center justify-between pt-3 border-t border-slate-700">
+                <div className="flex items-center gap-2 text-slate-400 text-xs">
+                  <Calendar className="w-3 h-3" />
+                  <span>
+                    {latestInterview.createdAt
+                      ? new Date(latestInterview.createdAt).toLocaleDateString()
+                      : "Today"
+                    }
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-400 text-xs">
+                  <span>{latestInterview.questions?.length || 0} questions</span>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button
+                onClick={() => handleNavigation("/progress-reports")}
+                className="w-full mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded-lg transition-colors flex items-center justify-center gap-2"
+              >
+                View Detailed Report
+                <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

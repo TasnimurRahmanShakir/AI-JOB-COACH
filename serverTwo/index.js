@@ -37,7 +37,6 @@ const JWT_SECRET = process.env.JWT_SECRET || "supersecretkey";
 // --------------------
 const authenticateUser = (req, res, next) => {
     console.log("🔍 Authentication check for:", req.method, req.path);
-    console.log("🔍 All headers:", req.headers);
     console.log("🔍 Auth header:", req.headers.authorization);
 
     const authHeader = req.headers.authorization;
@@ -52,7 +51,6 @@ const authenticateUser = (req, res, next) => {
     }
 
     const token = authHeader.split(" ")[1];
-    console.log("🔍 Extracted token:", token ? token.substring(0, 20) + "..." : "null");
 
     if (!token) {
         console.log("❌ Token missing from header");
@@ -63,9 +61,8 @@ const authenticateUser = (req, res, next) => {
     }
 
     try {
-        console.log("🔍 Verifying token with secret:", JWT_SECRET.substring(0, 10) + "...");
         const decoded = jwt.verify(token, JWT_SECRET);
-        console.log("✅ Token decoded successfully:", decoded);
+        console.log("✅ Token decoded successfully:", decoded.userId);
 
         if (!decoded.userId) {
             console.log("❌ Token missing userId");
@@ -76,7 +73,6 @@ const authenticateUser = (req, res, next) => {
         }
 
         req.user = decoded; // { userId }
-        console.log("✅ Authenticated user:", decoded.userId);
         next();
     } catch (err) {
         console.error("❌ JWT verification error:", err.message);
@@ -130,7 +126,6 @@ app.post("/api/login", async (req, res) => {
         );
 
         console.log("✅ User logged in:", email);
-        console.log("✅ Token generated:", token.substring(0, 20) + "...");
 
         res.json({
             token,
@@ -223,61 +218,133 @@ app.get("/api/ats-scores", authenticateUser, async (req, res) => {
 });
 
 // --------------------
-// INTERVIEW ANALYSIS ROUTES (Simple version)
+// INTERVIEW ANALYSIS ROUTES
 // --------------------
 
-// Save interview analysis (protected) - Following ATS score pattern
-// --------------------
-// Save Interview Analysis (works for both audio + video)
-// --------------------
+// Save interview analysis - ENHANCED VERSION
 app.post("/api/interview-analysis", authenticateUser, async (req, res) => {
     try {
-        const { type, data } = req.body;
-        // type = "audio" | "video"
-        if (!type || !data) {
-            return res.status(400).json({ error: "Missing type or data" });
+        console.log("💾 Saving interview analysis for user:", req.user.userId);
+        console.log("💾 Request body:", req.body);
+
+        const { interviewType, questions, averages, final_report, raw_api_data } = req.body;
+
+        if (!interviewType) {
+            return res.status(400).json({ error: "Interview type is required" });
         }
 
-        const collection = client.db("interviewsDB").collection("analysis");
+        const db = client.db("resumeDB");
+        const collection = db.collection("interviewAnalysis");
+
+        // Delete existing interviews of the same type for this user (keep only latest)
+        await collection.deleteMany({
+            userId: req.user.userId,
+            interviewType: interviewType
+        });
+
         const newEntry = {
             userId: req.user.userId,
-            type, // "audio" or "video"
-            data,
+            interviewType: interviewType, // "audio" or "video"
+            questions: questions || [],
+            averages: averages || {},
+            final_report: final_report || "",
+            raw_api_data: raw_api_data || null, // Store complete API response
             createdAt: new Date(),
         };
 
-        await collection.insertOne(newEntry);
-        res.json({ success: true, saved: newEntry });
+        console.log("💾 Saving entry:", JSON.stringify(newEntry, null, 2));
+
+        const result = await collection.insertOne(newEntry);
+
+        console.log("✅ Interview analysis saved successfully:", result.insertedId);
+
+        res.json({
+            success: true,
+            message: "Interview analysis saved successfully",
+            id: result.insertedId,
+            interviewType: interviewType
+        });
     } catch (err) {
         console.error("❌ Save error:", err);
-        res.status(500).json({ error: "Failed to save interview data" });
+        res.status(500).json({ error: "Failed to save interview analysis" });
     }
 });
 
-// --------------------
-// Get Latest Interview Analysis
-// --------------------
+// Get latest interview analysis of any type
 app.get("/api/interview-analysis/latest", authenticateUser, async (req, res) => {
     try {
-        const { type } = req.query; // pass ?type=audio or ?type=video
-        if (!type) {
-            return res.status(400).json({ error: "Missing interview type in query" });
-        }
+        console.log("🔍 Fetching latest interview for user:", req.user.userId);
 
-        const collection = client.db("interviewsDB").collection("analysis");
-        const latest = await collection.findOne(
-            { userId: req.user.userId, type },
-            { sort: { createdAt: -1 } }
-        );
+        const db = client.db("resumeDB");
+        const collection = db.collection("interviewAnalysis");
+
+        // Find the most recent interview of any type
+        const latest = await collection
+            .findOne(
+                { userId: req.user.userId },
+                { sort: { createdAt: -1 } }
+            );
 
         if (!latest) {
-            return res.status(404).json({ error: "No interview data found" });
+            console.log("📭 No interview data found for user");
+            return res.status(200).json(null);
         }
 
-        res.json(latest.data);
+        console.log("✅ Found latest interview:", {
+            type: latest.interviewType,
+            createdAt: latest.createdAt,
+            hasQuestions: latest.questions?.length > 0,
+            hasAverages: !!latest.averages
+        });
+
+        res.json({
+            interviewType: latest.interviewType,
+            questions: latest.questions,
+            averages: latest.averages,
+            final_report: latest.final_report,
+            createdAt: latest.createdAt
+        });
     } catch (err) {
         console.error("❌ Fetch error:", err);
-        res.status(500).json({ error: "Failed to fetch interview data" });
+        res.status(500).json({ error: "Failed to fetch interview analysis" });
+    }
+});
+
+// Get interview analysis by specific type
+app.get("/api/interview-analysis/type/:type", authenticateUser, async (req, res) => {
+    try {
+        const { type } = req.params;
+        console.log(`🔍 Fetching ${type} interview for user:`, req.user.userId);
+
+        const db = client.db("resumeDB");
+        const collection = db.collection("interviewAnalysis");
+
+        const interview = await collection
+            .findOne(
+                { userId: req.user.userId, interviewType: type },
+                { sort: { createdAt: -1 } }
+            );
+
+        if (!interview) {
+            console.log(`📭 No ${type} interview found for user`);
+            return res.status(200).json(null);
+        }
+
+        console.log(`✅ Found ${type} interview:`, {
+            createdAt: interview.createdAt,
+            hasQuestions: interview.questions?.length > 0
+        });
+
+        res.json({
+            interviewType: interview.interviewType,
+            questions: interview.questions,
+            averages: interview.averages,
+            final_report: interview.final_report,
+            createdAt: interview.createdAt
+        });
+    } catch (err) {
+        console.error("❌ Fetch error:", err);
+        res.status(500).json({ error: "Failed to fetch interview analysis" });
     }
 });
 

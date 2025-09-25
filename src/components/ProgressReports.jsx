@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useContext } from "react";
 import {
   BarChart,
   Bar,
@@ -8,9 +8,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import Overview from "./Overview";
+import AuthContext from "../context/authContext";
 
 function ProgressReports() {
   const location = useLocation();
+  const { user } = useContext(AuthContext);
 
   // Get interview type from navigation state, default to checking latest from backend
   const navigatedInterviewType = location.state?.interviewType;
@@ -210,6 +213,32 @@ function ProgressReports() {
           const saved = await saveInterviewToBackend(interviewType, processedData, rawData);
 
           if (saved) {
+            // Store the interview overall score
+            if (processedData.averages?.overall_score) {
+              try {
+                console.log("📊 Storing interview score:", processedData.averages.overall_score);
+                const storeResponse = await fetch('http://localhost:5000/api/store-interview-score', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    userId: user?.uid || 'demo-user',
+                    overallScore: processedData.averages.overall_score,
+                    timestamp: new Date().toISOString()
+                  })
+                });
+
+                if (storeResponse.ok) {
+                  console.log("✅ Interview score stored successfully");
+                } else {
+                  console.error("❌ Failed to store interview score");
+                }
+              } catch (error) {
+                console.error("❌ Error storing interview score:", error);
+              }
+            }
+
             // If saved successfully, fetch it back to ensure consistency
             const savedData = await getInterviewByTypeFromBackend(interviewType);
             if (savedData) {
@@ -348,20 +377,7 @@ function ProgressReports() {
       },
     ];
 
-  const demoScores = interviewData?.averages
-    ? [
-      interviewData.averages.overall_score,
-      interviewData.averages.correctness * 10,
-      interviewData.averages.confidence / 10,
-      Math.min(interviewData.averages.clarity, 100),
-      75, 80, 85,
-    ]
-    : [70, 75, 80, 78, 85, 82, 90];
 
-  const last7Scores = demoScores.map((score, i) => ({
-    label: `${i + 1}`,
-    score: Math.round(Math.min(score, 100)),
-  }));
 
   return (
     <div className="max-w-[1400px] mx-auto p-6 lg:p-8">
@@ -548,25 +564,7 @@ function ProgressReports() {
               </div>
             )}
 
-            <div className="mb-6">
-              <h3 className="text-slate-300 text-sm font-medium mb-3">
-                Performance Metrics
-              </h3>
-              <div className="h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={last7Scores}>
-                    <XAxis dataKey="label" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" domain={[0, 100]} />
-                    <Tooltip cursor={{ fill: "rgba(255,255,255,0.05)" }} />
-                    <Bar
-                      dataKey="score"
-                      fill="#3b82f6"
-                      radius={[6, 6, 0, 0]}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
+            <Overview />
 
             <div className="border-t border-slate-700 pt-6">
               <h3 className="text-blue-400 font-medium mb-2">

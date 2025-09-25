@@ -381,7 +381,7 @@ function ProgressReports() {
                 : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
             >
-              🎤 Audio
+              Audio
             </button>
             <button
               onClick={() => switchInterviewType('video')}
@@ -390,7 +390,7 @@ function ProgressReports() {
                 : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
             >
-              🎥 Video
+              Video
             </button>
           </div>
         </div>

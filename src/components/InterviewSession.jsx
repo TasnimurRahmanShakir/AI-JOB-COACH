@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  ChartScatter,
+  Upload,
 
+} from "lucide-react";
 export default function InterviewSession({
   interviewQuestions,
   interviewType = "audio",
@@ -301,10 +305,10 @@ export default function InterviewSession({
         <div className="bg-slate-800 rounded-2xl p-8 max-w-md w-full mx-auto">
           <div className="text-center mb-6">
             <div className="text-4xl mb-4">
-              {uploadProgress.isUploading ? "📤" : "✅"}
+              {uploadProgress.isUploading ? "" : "✅"}
             </div>
             <h2 className="text-2xl font-bold mb-2">
-              {uploadProgress.isUploading ? "Uploading Interview" : "Upload Complete!"}
+              {uploadProgress.isUploading ? "Analyzing Interview" : "Upload Complete!"}
             </h2>
             <p className="text-slate-300">
               {uploadProgress.isUploading
@@ -333,7 +337,7 @@ export default function InterviewSession({
           {/* Current File */}
           {uploadProgress.isUploading && (
             <div className="mb-4">
-              <p className="text-sm text-slate-300 mb-1">Currently uploading:</p>
+              <p className="text-sm text-slate-300 mb-1">Currently Analyzing:</p>
               <p className="text-white font-medium">{uploadProgress.currentFileName}</p>
               <p className="text-sm text-slate-400">
                 File {uploadProgress.currentFile} of {uploadProgress.totalFiles}
@@ -435,7 +439,7 @@ export default function InterviewSession({
             muted
           />
         ) : (
-          <span className="text-3xl mb-4">🎤 Audio Interview</span>
+          <span className="text-3xl mb-4"> Audio Interview</span>
         )}
 
         {showStartButton && !interviewFinished && (
